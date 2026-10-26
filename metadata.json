@@ -1,0 +1,6 @@
+{
+  "name": "DREAM WORLD: 3D Open-World Adventure",
+  "description": "A high-fidelity third-person 3D open-world game set in a vibrant world inspired by Bangladesh, featuring detailed rigged human characters, interactive vehicles, quests, dynamic weather, and continuous seamless exploration across city, village, river, and mountain waterfall regions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
