@@ -18,23 +18,78 @@
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <script>
-      // Gracefully prevent benign Vite HMR WebSocket closing events from bubbling in iframe preview
-      window.addEventListener('error', function (event) {
-        if (event && (
-          (typeof event.message === 'string' && (event.message.includes('WebSocket') || event.message.includes('[vite]'))) ||
-          (event.error && typeof event.error.message === 'string' && (event.error.message.includes('WebSocket') || event.error.message.includes('[vite]')))
-        )) {
-          event.stopImmediatePropagation();
-          event.preventDefault();
-          return true;
+      // Gracefully prevent benign Vite HMR WebSocket closing events in iframe preview (HMR is disabled in this environment)
+      (function () {
+        // 1. Filter benign Vite HMR console errors
+        const originalConsoleError = console.error;
+        console.error = function (...args) {
+          const first = args[0];
+          const text = (first && (first.message || first.stack)) ? String(first.message || first.stack) : args.join(' ');
+          if (text.includes('WebSocket closed without opened') || (text.includes('[vite]') && text.includes('WebSocket'))) {
+            return;
+          }
+          originalConsoleError.apply(console, args);
+        };
+
+        // 2. Intercept Vite HMR WebSocket client so it never attempts handshake failures
+        const OriginalWebSocket = window.WebSocket;
+        if (OriginalWebSocket) {
+          window.WebSocket = function (url, protocols) {
+            const isViteHmr = protocols === 'vite-hmr' ||
+              (Array.isArray(protocols) && protocols.includes('vite-hmr')) ||
+              (typeof url === 'string' && (url.includes('vite-hmr') || url.includes('/@vite/client')));
+
+            if (isViteHmr) {
+              const dummyTarget = new EventTarget();
+              const dummyWs = {
+                readyState: 1, // OPEN to keep client quiet
+                CONNECTING: 0,
+                OPEN: 1,
+                CLOSING: 2,
+                CLOSED: 3,
+                url: String(url),
+                protocol: 'vite-hmr',
+                bufferedAmount: 0,
+                extensions: '',
+                binaryType: 'blob',
+                send: function () {},
+                close: function () {},
+                addEventListener: dummyTarget.addEventListener.bind(dummyTarget),
+                removeEventListener: dummyTarget.removeEventListener.bind(dummyTarget),
+                dispatchEvent: dummyTarget.dispatchEvent.bind(dummyTarget),
+                onopen: null,
+                onclose: null,
+                onerror: null,
+                onmessage: null,
+              };
+              return dummyWs;
+            }
+            return new OriginalWebSocket(url, protocols);
+          };
+          window.WebSocket.prototype = OriginalWebSocket.prototype;
+          window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+          window.WebSocket.OPEN = OriginalWebSocket.OPEN;
+          window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
+          window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
         }
-      }, true);
-      window.addEventListener('unhandledrejection', function (event) {
-        if (event && event.reason && typeof event.reason.message === 'string' && (event.reason.message.includes('WebSocket') || event.reason.message.includes('[vite]'))) {
-          event.stopImmediatePropagation();
-          event.preventDefault();
-        }
-      }, true);
+
+        // 3. Catch any remaining window error events
+        window.addEventListener('error', function (event) {
+          const msg = event?.message || event?.error?.message || '';
+          if (typeof msg === 'string' && (msg.includes('WebSocket') || msg.includes('[vite]'))) {
+            event.stopImmediatePropagation();
+            event.preventDefault();
+            return true;
+          }
+        }, true);
+        window.addEventListener('unhandledrejection', function (event) {
+          const msg = event?.reason?.message || event?.reason || '';
+          if (typeof msg === 'string' && (msg.includes('WebSocket') || msg.includes('[vite]'))) {
+            event.stopImmediatePropagation();
+            event.preventDefault();
+          }
+        }, true);
+      })();
     </script>
   </head>
   <body>
