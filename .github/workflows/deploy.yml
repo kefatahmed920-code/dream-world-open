@@ -1,3 +1,4 @@
+
 name: Deploy Dream World to GitHub Pages
 
 on:
@@ -20,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -29,18 +30,19 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
-      - name: Build game
+      - name: Build Dream World
         run: npm run build
 
-      - name: Setup Pages
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload game files
+      - name: Upload built game
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
 
-      - name: Deploy game
+      - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
+        
