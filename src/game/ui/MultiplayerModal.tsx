@@ -3,11 +3,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { Users, X, Send, Wifi, WifiOff, Globe, Sparkles, MessageSquare, Server, CheckCircle2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  Users,
+  X,
+  Send,
+  Wifi,
+  WifiOff,
+  Globe,
+  Sparkles,
+  MessageSquare,
+  Server,
+  CheckCircle2,
+  AlertCircle,
+  RotateCcw,
+  RefreshCw,
+} from 'lucide-react';
 import { MultiplayerManager } from '../multiplayer/multiplayerManager';
 import { soundManager } from '../audio/soundManager';
-import { NetworkConfig } from '../config/networkConfig';
+import { NetworkConfig, DEFAULT_PRODUCTION_BACKEND } from '../config/networkConfig';
 
 interface MultiplayerModalProps {
   multiplayerManager: MultiplayerManager;
@@ -24,11 +38,55 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
   const [roomName, setRoomName] = useState(multiplayerManager.currentRoom);
   const [chatInput, setChatInput] = useState('');
   const [isOnline, setIsOnline] = useState(multiplayerManager.isOnlineMode);
+  const [isConnected, setIsConnected] = useState(multiplayerManager.isConnected);
+  const [playerCount, setPlayerCount] = useState(multiplayerManager.serverPlayerCount);
+  const [statusMessage, setStatusMessage] = useState(multiplayerManager.connectionMessage);
+  const [latencyMs, setLatencyMs] = useState(multiplayerManager.latencyMs);
   const [chatMessages, setChatMessages] = useState<{ sender: string; text: string; time: string }[]>([]);
   const [backendUrl, setBackendUrl] = useState(NetworkConfig.getCustomBackendUrl());
-  const [showServerConfig, setShowServerConfig] = useState(NetworkConfig.isGitHubPages() && !NetworkConfig.getCustomBackendUrl());
+  const [showServerConfig, setShowServerConfig] = useState(false);
   const [serverPingStatus, setServerPingStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [pingMessage, setPingMessage] = useState('');
+
+  // Auto-connect to production backend when multiplayer modal opens
+  useEffect(() => {
+    if (isOpen) {
+      if (!multiplayerManager.isOnlineMode) {
+        multiplayerManager.startOnlineMultiplayer();
+        setIsOnline(true);
+      }
+      setRoomName(multiplayerManager.currentRoom);
+      setPlayerName(multiplayerManager.localPlayerName);
+      setIsConnected(multiplayerManager.isConnected);
+      setPlayerCount(multiplayerManager.serverPlayerCount);
+      setStatusMessage(multiplayerManager.connectionMessage);
+    }
+  }, [isOpen, multiplayerManager]);
+
+  // Subscribe to connection updates from manager
+  useEffect(() => {
+    const handleConn = (conn: boolean, count: number, msg?: string) => {
+      setIsConnected(conn);
+      setPlayerCount(count);
+      setRoomName(multiplayerManager.currentRoom);
+      setLatencyMs(multiplayerManager.latencyMs);
+      if (msg) setStatusMessage(msg);
+    };
+
+    multiplayerManager.onConnectionChanged = handleConn;
+
+    const interval = setInterval(() => {
+      setIsConnected(multiplayerManager.isConnected);
+      setPlayerCount(multiplayerManager.serverPlayerCount);
+      setRoomName(multiplayerManager.currentRoom);
+      setLatencyMs(multiplayerManager.latencyMs);
+      setStatusMessage(multiplayerManager.connectionMessage);
+    }, 1500);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [multiplayerManager]);
 
   const handleTestBackend = async () => {
     soundManager.playUiClick();
@@ -50,8 +108,21 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
       }
     } catch {
       setServerPingStatus('error');
-      setPingMessage('Could not reach server. Check URL or ensure server is running.');
+      setPingMessage('Could not reach server. If sleeping, Render wakes up in ~30s.');
     }
+  };
+
+  const handleResetToDefault = () => {
+    soundManager.playUiClick();
+    NetworkConfig.resetToDefaultBackend();
+    setBackendUrl('');
+    setPingMessage('Reset to permanent production backend (dream-world-open.onrender.com)');
+    setServerPingStatus('success');
+    multiplayerManager.stopOnlineMultiplayer();
+    setTimeout(() => {
+      multiplayerManager.startOnlineMultiplayer();
+      setIsOnline(true);
+    }, 300);
   };
 
   if (!isOpen) return null;
@@ -64,6 +135,9 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
     } else {
       multiplayerManager.stopOnlineMultiplayer();
       setIsOnline(false);
+      setIsConnected(false);
+      setPlayerCount(1);
+      setStatusMessage('Offline');
     }
   };
 
@@ -91,25 +165,42 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-slate-950/80 backdrop-blur-xs select-none pointer-events-auto">
-      <div className="w-full max-w-xl bg-slate-900 border-2 border-slate-700 rounded-3xl shadow-2xl p-6 flex flex-col gap-4 text-white overflow-hidden">
+      <div className="w-full max-w-xl bg-slate-900 border-2 border-slate-700 rounded-3xl shadow-2xl p-5 md:p-6 flex flex-col gap-3.5 text-white overflow-hidden max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-3">
-            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center border shadow-lg ${
-              isOnline
-                ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-400'
-                : 'bg-slate-800 border-slate-700 text-slate-400'
-            }`}>
+            <div
+              className={`w-11 h-11 rounded-2xl flex items-center justify-center border shadow-lg transition-colors ${
+                isConnected
+                  ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-400'
+                  : isOnline
+                  ? 'bg-amber-950/90 border-amber-500/50 text-amber-400'
+                  : 'bg-slate-800 border-slate-700 text-slate-400'
+              }`}
+            >
               <Users className="w-6 h-6" />
             </div>
             <div>
               <div className="text-base font-bold text-white flex items-center gap-2">
                 ONLINE MULTIPLAYER · <span className="text-emerald-400 font-medium">মাল্টিপ্লেয়ার</span>
               </div>
-              <div className="text-xs text-slate-400">
-                {isOnline
-                  ? `Connected to Room: ${roomName} (${multiplayerManager.remotePlayers.size + 1} Explorers)`
-                  : 'Currently in Single-Player / Offline Mode'}
+              <div className="text-xs text-slate-400 flex items-center gap-2">
+                {isOnline ? (
+                  <>
+                    <span
+                      className={`inline-block w-2 h-2 rounded-full ${
+                        isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-ping'
+                      }`}
+                    />
+                    <span>
+                      {isConnected
+                        ? `Room: ${roomName} (${playerCount} Online)`
+                        : statusMessage || 'Connecting to Render Backend...'}
+                    </span>
+                  </>
+                ) : (
+                  'Currently in Single-Player / Offline Mode'
+                )}
               </div>
             </div>
           </div>
@@ -126,7 +217,7 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
         <div className="grid grid-cols-2 gap-2.5 p-1 bg-slate-950/80 rounded-2xl border border-slate-800">
           <button
             onClick={() => handleToggleOnline(false)}
-            className={`py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+            className={`py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
               !isOnline
                 ? 'bg-slate-800 text-white shadow-md border border-slate-600'
                 : 'text-slate-400 hover:text-slate-200'
@@ -138,7 +229,7 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
 
           <button
             onClick={() => handleToggleOnline(true)}
-            className={`py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+            className={`py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
               isOnline
                 ? 'bg-emerald-600 text-white shadow-md border border-emerald-400'
                 : 'text-slate-400 hover:text-slate-200'
@@ -163,58 +254,49 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-slate-400 font-semibold mb-1">Multiplayer Room (রুম):</label>
+            <label className="block text-slate-400 font-semibold mb-1">Active Room (রুম):</label>
             <input
               type="text"
               value={roomName}
               disabled={isOnline}
               onChange={(e) => setRoomName(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-medium focus:border-emerald-500 outline-none disabled:opacity-60"
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-medium focus:border-emerald-500 outline-none disabled:opacity-70"
               placeholder="Dhaka-Hub-1"
             />
           </div>
         </div>
 
-        {/* Backend Server Connection Setting */}
+        {/* Backend Status & Optional Advanced Configure */}
         <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-2.5 text-xs space-y-2">
           <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setShowServerConfig((prev) => !prev)}
-              className="flex items-center gap-2 text-slate-300 hover:text-white font-semibold"
-            >
+            <div className="flex items-center gap-2 text-slate-300 font-semibold">
               <Server className="w-4 h-4 text-emerald-400" />
-              <span>Multiplayer Backend Server</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
-                {backendUrl ? 'Custom Host' : (NetworkConfig.isGitHubPages() ? 'Needs Server' : 'Default Origin')}
+              <span>Production Backend:</span>
+              <span className="font-mono text-[11px] text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">
+                dream-world-open.onrender.com
               </span>
-            </button>
+            </div>
+
             <button
               type="button"
               onClick={() => setShowServerConfig((prev) => !prev)}
-              className="text-[11px] text-emerald-400 hover:underline"
+              className="text-[11px] text-slate-400 hover:text-emerald-400 transition-colors"
             >
-              {showServerConfig ? 'Hide' : 'Configure'}
+              {showServerConfig ? 'Close' : 'Advanced'}
             </button>
           </div>
 
           {showServerConfig && (
-            <div className="space-y-2 pt-1">
+            <div className="space-y-2 pt-1 border-t border-slate-800/80">
               <div className="text-[11px] text-slate-400 leading-relaxed">
-                {NetworkConfig.isGitHubPages() ? (
-                  <span className="text-amber-300">
-                    GitHub Pages detected: GitHub hosts static web files only. Enter your deployed backend server URL (e.g. from Render or Cloud Run) to connect online.
-                  </span>
-                ) : (
-                  'Deploy your server.ts to any Node.js host (Render, Railway, Cloud Run) and paste the URL here, or leave empty for same origin.'
-                )}
+                The game automatically uses the deployed Render backend with secure WSS. You only need this setting if you run a custom local or private dedicated server.
               </div>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={backendUrl}
                   onChange={(e) => setBackendUrl(e.target.value)}
-                  placeholder="https://your-server-name.onrender.com"
+                  placeholder="https://dream-world-open.onrender.com"
                   className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:border-emerald-500 outline-none"
                 />
                 <button
@@ -223,14 +305,25 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                   disabled={serverPingStatus === 'testing'}
                   className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-emerald-400 flex items-center gap-1.5"
                 >
-                  {serverPingStatus === 'testing' ? 'Testing...' : 'Test & Save'}
+                  {serverPingStatus === 'testing' ? 'Testing...' : 'Test'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetToDefault}
+                  title="Reset to permanent Render production server"
+                  className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-1"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">Reset</span>
                 </button>
               </div>
 
               {pingMessage && (
-                <div className={`text-[11px] flex items-center gap-1.5 ${
-                  serverPingStatus === 'success' ? 'text-emerald-400' : 'text-rose-400'
-                }`}>
+                <div
+                  className={`text-[11px] flex items-center gap-1.5 ${
+                    serverPingStatus === 'success' ? 'text-emerald-400' : 'text-amber-400'
+                  }`}
+                >
                   {serverPingStatus === 'success' ? (
                     <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                   ) : (
@@ -245,14 +338,34 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
 
         {/* Live Multiplayer Status & Chat */}
         {isOnline ? (
-          <div className="space-y-3 pt-1">
+          <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between text-xs text-slate-300 px-1">
-              <span className="flex items-center gap-1.5 font-bold text-emerald-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                Live Room Session Active
+              <span className="flex items-center gap-1.5 font-bold">
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-ping'
+                  }`}
+                />
+                <span className={isConnected ? 'text-emerald-400' : 'text-amber-300'}>
+                  {isConnected
+                    ? `Live Server Connected (${playerCount} Explorers in ${roomName})`
+                    : statusMessage || 'Connecting to Render backend...'}
+                </span>
               </span>
-              <span className="font-mono text-slate-400">{multiplayerManager.latencyMs}ms latency</span>
+              {isConnected && latencyMs > 0 && (
+                <span className="font-mono text-[11px] text-emerald-400">{latencyMs}ms ping</span>
+              )}
             </div>
+
+            {/* Render Free Tier Wake-up Advisory */}
+            {!isConnected && (
+              <div className="text-[11px] bg-amber-950/40 border border-amber-500/30 rounded-xl px-3 py-2 text-amber-200 leading-relaxed flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-amber-400 shrink-0 animate-spin" />
+                <span>
+                  Render Free Tier: If the server was idle, spin-up takes ~30-40 seconds. Automatic connection will establish as soon as the service responds.
+                </span>
+              </div>
+            )}
 
             {/* Quick Chat Presets */}
             <div className="flex flex-wrap gap-1.5">

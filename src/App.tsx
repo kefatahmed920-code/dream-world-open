@@ -177,11 +177,12 @@ export default function App() {
 
   const handleStartGame = (mode: 'single' | 'multiplayer') => {
     setGameState('playing');
+    // Automatically connect to the production multiplayer backend on start
+    engineRef.current?.multiplayerManager.startOnlineMultiplayer();
     if (mode === 'multiplayer') {
-      engineRef.current?.multiplayerManager.startOnlineMultiplayer();
-      showToast('Connected to Online Multiplayer Room! Other players will appear nearby.', 'ONLINE CO-OP');
+      showToast('Connected to Online Multiplayer! Other players will appear nearby.', 'ONLINE CO-OP');
     } else {
-      showToast('Welcome to Bangladesh Open World! Meet Rahim Bhai at the tea stall.', 'ADVENTURE BEGUN');
+      showToast('Welcome to Bangladesh Open World! Connected to Dhaka Hub.', 'ADVENTURE BEGUN');
     }
   };
 

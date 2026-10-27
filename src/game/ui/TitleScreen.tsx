@@ -45,7 +45,8 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
 }) => {
   const [selectedMode, setSelectedMode] = useState<'single' | 'multiplayer'>('single');
   const [user, setUser] = useState<PlayerAccount | null>(authManager.getCurrentUser());
-  const [onlineCount, setOnlineCount] = useState<number>(1);
+  const [onlineCount, setOnlineCount] = useState<number | null>(null);
+  const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [notificationsActive, setNotificationsActive] = useState<boolean>(retentionManager.isEnabled());
 
   useEffect(() => {
@@ -53,21 +54,33 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
     return () => unsub();
   }, []);
 
-  // Poll server stats for live player count
+  // Poll server stats for real live player count
   useEffect(() => {
+    let isMounted = true;
     const fetchStats = () => {
       fetch(NetworkConfig.getApiUrl('/api/stats'))
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) throw new Error('status ' + res.status);
+          return res.json();
+        })
         .then((data) => {
+          if (!isMounted) return;
           if (data && typeof data.totalOnline === 'number') {
-            setOnlineCount(Math.max(1, data.totalOnline));
+            setOnlineCount(data.totalOnline);
+            setServerStatus('online');
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          if (!isMounted) return;
+          setServerStatus('offline');
+        });
     };
     fetchStats();
     const interval = setInterval(fetchStats, 10000);
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -98,10 +111,32 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           {/* Live Online Ticker */}
           <div className="flex items-center gap-2 bg-slate-900/90 text-emerald-400 border border-emerald-500/40 px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg backdrop-blur-xs">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              <span
+                className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  serverStatus === 'online'
+                    ? 'animate-ping bg-emerald-400'
+                    : serverStatus === 'checking'
+                    ? 'animate-pulse bg-amber-400'
+                    : 'bg-slate-500'
+                }`}
+              />
+              <span
+                className={`relative inline-flex rounded-full h-2 w-2 ${
+                  serverStatus === 'online'
+                    ? 'bg-emerald-500'
+                    : serverStatus === 'checking'
+                    ? 'bg-amber-400'
+                    : 'bg-slate-400'
+                }`}
+              />
             </span>
-            <span>{onlineCount} LIVE PLAYERS · DHAKA HUB</span>
+            <span>
+              {serverStatus === 'online'
+                ? `${onlineCount} ACTIVE ONLINE · DHAKA HUB`
+                : serverStatus === 'checking'
+                ? 'CONNECTING TO DHAKA HUB...'
+                : 'DHAKA HUB (RENDER SERVER)'}
+            </span>
           </div>
 
           {/* Leaderboard Button */}

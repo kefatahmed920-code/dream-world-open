@@ -106,25 +106,48 @@ export class RemotePlayerActor {
   }
 }
 
+export type MultiplayerConnectionState =
+  | 'disconnected'
+  | 'discovering'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'failed';
+
 export class MultiplayerManager {
   public isConnected = false;
   public isOnlineMode = false;
+  public connectionStatus: MultiplayerConnectionState = 'disconnected';
+  public connectionMessage = 'Offline';
   public localPlayerId: string;
   public localPlayerName = 'Explorer';
   public currentRoom = 'Dhaka-Hub-1';
+  public serverPlayerCount = 1;
+  public latencyMs = 0;
   public remotePlayers: Map<string, RemotePlayerActor> = new Map();
 
   private scene: THREE.Scene;
   private socket: WebSocket | null = null;
   private channel: BroadcastChannel | null = null;
   private sendTimer = 0;
-  private pingTime = 0;
-  public latencyMs = 24;
+  private pingTimer = 0;
+  private lastPingSentAt = 0;
+  private reconnectTimeoutId: number | null = null;
+  private retryCount = 0;
+  private maxRetries = 15;
+  private lastLocalState: {
+    pos: THREE.Vector3;
+    rotY: number;
+    speed: number;
+    air: boolean;
+    drive: boolean;
+    app: CharacterAppearance;
+  } | null = null;
 
   public onPlayerJoined?: (name: string) => void;
   public onPlayerLeft?: (name: string) => void;
   public onChatMessage?: (sender: string, text: string) => void;
-  public onConnectionChanged?: (connected: boolean, playerCount: number) => void;
+  public onConnectionChanged?: (connected: boolean, playerCount: number, message?: string) => void;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -140,37 +163,106 @@ export class MultiplayerManager {
     }
   }
 
-  public startOnlineMultiplayer(room = 'Dhaka-Hub-1', playerName?: string) {
+  /**
+   * Starts online multiplayer, automatically connecting to the production backend
+   */
+  public async startOnlineMultiplayer(room?: string, playerName?: string) {
     this.isOnlineMode = true;
-    this.currentRoom = room;
+    if (this.reconnectTimeoutId) {
+      window.clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
+    }
+
     if (playerName) {
       this.localPlayerName = playerName;
       localStorage.setItem('dream_player_name', playerName);
     }
 
-    // 1. Initialize BroadcastChannel for instant local cross-tab / local network sync
+    // Auto-discover room with capacity if not explicitly provided or if default Hub-1
+    if (!room || room === 'Dhaka-Hub-1') {
+      this.connectionStatus = 'discovering';
+      this.connectionMessage = 'Checking room capacity...';
+      try {
+        const statsUrl = NetworkConfig.getApiUrl('/api/stats');
+        const res = await Promise.race([
+          fetch(statsUrl),
+          new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500)),
+        ]);
+        if (res.ok) {
+          const stats = await res.json();
+          if (Array.isArray(stats.rooms) && stats.rooms.length > 0) {
+            // Pick first room with available capacity (< max)
+            const available = stats.rooms.find(
+              (r: { name: string; players: number; max: number }) => r.players < (r.max || 50)
+            );
+            if (available) {
+              this.currentRoom = available.name;
+            } else {
+              this.currentRoom = `Dhaka-Hub-${stats.rooms.length + 1}`;
+            }
+          }
+        }
+      } catch {
+        // Default to Dhaka-Hub-1 if stats request timed out
+        this.currentRoom = 'Dhaka-Hub-1';
+      }
+    } else {
+      this.currentRoom = room;
+    }
+
+    // Connect to WebSocket backend
+    this.connectSocket();
+  }
+
+  /**
+   * Connects to the WebSocket server using NetworkConfig (defaults to Render backend)
+   */
+  private connectSocket() {
+    // 1. Initialize BroadcastChannel for same-browser multi-tab testing
     try {
+      if (this.channel) {
+        this.channel.close();
+      }
       this.channel = new BroadcastChannel(`dream_multiplayer_${this.currentRoom}`);
       this.channel.onmessage = (event) => {
         this.handleNetworkMessage(event.data);
       };
     } catch {
-      // BroadcastChannel not available
+      // BroadcastChannel unavailable in some environments
     }
 
-    // 2. Initialize WebSocket transport if available
+    // 2. Open WebSocket
     try {
+      if (this.socket) {
+        try {
+          this.socket.close();
+        } catch {}
+        this.socket = null;
+      }
+
       const wsUrl = NetworkConfig.getGameWebSocketUrl({
         room: this.currentRoom,
         id: this.localPlayerId,
         name: encodeURIComponent(this.localPlayerName),
       });
+
+      this.connectionStatus = 'connecting';
+      this.connectionMessage = 'Connecting to Render backend...';
+      this.onConnectionChanged?.(false, this.serverPlayerCount, this.connectionMessage);
+
       this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
         this.isConnected = true;
+        this.retryCount = 0;
+        this.connectionStatus = 'connected';
+        this.connectionMessage = 'Connected to production server';
         this.broadcastJoin();
-        this.onConnectionChanged?.(true, this.remotePlayers.size + 1);
+        this.serverPlayerCount = Math.max(1, this.remotePlayers.size + 1);
+        this.onConnectionChanged?.(true, this.serverPlayerCount, this.connectionMessage);
+
+        // Send initial ping immediately to measure true latency
+        this.sendPing();
       };
 
       this.socket.onmessage = (event) => {
@@ -181,26 +273,63 @@ export class MultiplayerManager {
       };
 
       this.socket.onclose = () => {
-        // Fallback gracefully to BroadcastChannel
-        this.isConnected = true; // still connected locally via channel
+        const wasOpen = this.isConnected;
+        this.isConnected = false;
+
+        if (this.isOnlineMode) {
+          this.connectionStatus = 'reconnecting';
+          this.retryCount++;
+          const delaySec = Math.min(10, 3 + this.retryCount * 2);
+          this.connectionMessage = `Reconnecting in ${delaySec}s (Render free tier may take 30-40s to wake up)...`;
+          this.onConnectionChanged?.(false, 1, this.connectionMessage);
+
+          if (this.reconnectTimeoutId) window.clearTimeout(this.reconnectTimeoutId);
+          this.reconnectTimeoutId = window.setTimeout(() => {
+            if (this.isOnlineMode) {
+              this.connectSocket();
+            }
+          }, delaySec * 1000);
+        } else {
+          this.connectionStatus = 'disconnected';
+          this.connectionMessage = 'Disconnected';
+          this.onConnectionChanged?.(false, 1, 'Disconnected');
+        }
       };
 
       this.socket.onerror = () => {
-        // Continue with BroadcastChannel
-        this.isConnected = true;
+        this.isConnected = false;
+        if (this.isOnlineMode) {
+          this.connectionStatus = 'reconnecting';
+          this.connectionMessage = 'Server connecting / spinning up...';
+        }
       };
-    } catch {
-      this.isConnected = true;
+    } catch (err) {
+      this.isConnected = false;
+      this.connectionStatus = 'failed';
+      this.connectionMessage = 'Connection failed';
+      this.onConnectionChanged?.(false, 1, 'Connection failed');
     }
+  }
 
-    // If socket didn't immediately fail, announce via channel
-    this.broadcastJoin();
-    this.onConnectionChanged?.(true, this.remotePlayers.size + 1);
+  private sendPing() {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.lastPingSentAt = Date.now();
+      try {
+        this.socket.send(JSON.stringify({ type: 'ping' }));
+      } catch {}
+    }
   }
 
   public stopOnlineMultiplayer() {
     this.isOnlineMode = false;
     this.isConnected = false;
+    this.connectionStatus = 'disconnected';
+    this.connectionMessage = 'Offline';
+
+    if (this.reconnectTimeoutId) {
+      window.clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
+    }
 
     // Send leave message
     this.sendMessage({
@@ -228,21 +357,22 @@ export class MultiplayerManager {
       actor.destroy(this.scene);
     }
     this.remotePlayers.clear();
-    this.onConnectionChanged?.(false, 1);
+    this.serverPlayerCount = 1;
+    this.onConnectionChanged?.(false, 1, 'Offline');
   }
 
   private sendMessage(msg: unknown) {
     if (!this.isOnlineMode) return;
     const jsonStr = JSON.stringify(msg);
 
-    // BroadcastChannel
+    // BroadcastChannel for local cross-tab sync
     if (this.channel) {
       try {
         this.channel.postMessage(msg);
       } catch {}
     }
 
-    // WebSocket
+    // WebSocket to Render backend
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       try {
         this.socket.send(jsonStr);
@@ -279,6 +409,15 @@ export class MultiplayerManager {
   ) {
     if (!this.isOnlineMode) return;
 
+    this.lastLocalState = {
+      pos: position.clone(),
+      rotY: rotationY,
+      speed,
+      air: isAirborne,
+      drive: isDriving,
+      app: appearance,
+    };
+
     this.sendMessage({
       type: 'update',
       senderId: this.localPlayerId,
@@ -294,35 +433,108 @@ export class MultiplayerManager {
   }
 
   private handleNetworkMessage(data: Record<string, unknown>) {
-    if (!data || data.senderId === this.localPlayerId) return;
+    if (!data) return;
+
+    // Handle Server Welcome packet
+    if (data.type === 'welcome') {
+      if (typeof data.room === 'string') {
+        this.currentRoom = data.room;
+      }
+      if (typeof data.memberCount === 'number') {
+        this.serverPlayerCount = data.memberCount;
+      }
+
+      // Populate existing room players immediately
+      if (Array.isArray(data.existingPlayers)) {
+        for (const p of data.existingPlayers) {
+          if (p && p.id && p.id !== this.localPlayerId && !this.remotePlayers.has(p.id)) {
+            const state: RemotePlayerState = {
+              id: p.id,
+              name: p.name || 'Explorer',
+              position: p.position || [6, 0, 12],
+              rotationY: p.rotationY || 0,
+              speed: p.speed || 0,
+              isAirborne: !!p.isAirborne,
+              isDriving: !!p.isDriving,
+              appearance: p.appearance as CharacterAppearance,
+              lastUpdate: Date.now(),
+            };
+            const actor = new RemotePlayerActor(state, this.scene);
+            this.remotePlayers.set(p.id, actor);
+          }
+        }
+      }
+
+      this.onConnectionChanged?.(true, this.serverPlayerCount, this.connectionMessage);
+      return;
+    }
+
+    // Handle Ping Pong latency response
+    if (data.type === 'pong') {
+      if (this.lastPingSentAt > 0) {
+        this.latencyMs = Math.max(1, Date.now() - this.lastPingSentAt);
+      }
+      return;
+    }
+
+    // Ignore self messages
+    if (data.senderId === this.localPlayerId) return;
 
     const senderId = data.senderId as string;
     const name = (data.name as string) || 'Player';
 
-    if (data.type === 'join') {
+    // Handle Player Join (support both server 'player_joined' and client 'join')
+    if (data.type === 'player_joined' || data.type === 'join') {
+      if (typeof data.memberCount === 'number') {
+        this.serverPlayerCount = data.memberCount;
+      } else {
+        this.serverPlayerCount = this.remotePlayers.size + 1;
+      }
+
       if (!this.remotePlayers.has(senderId)) {
         this.onPlayerJoined?.(name);
       }
-      // Reply with our presence so the new player discovers us
+
+      // Reply with our presence so the new player immediately sees us
+      if (this.lastLocalState) {
+        this.sendLocalState(
+          this.lastLocalState.pos,
+          this.lastLocalState.rotY,
+          this.lastLocalState.speed,
+          this.lastLocalState.air,
+          this.lastLocalState.drive,
+          this.lastLocalState.app,
+        );
+      }
+      this.onConnectionChanged?.(this.isConnected, this.serverPlayerCount, this.connectionMessage);
       return;
     }
 
-    if (data.type === 'leave') {
+    // Handle Player Leave (support both server 'player_left' and client 'leave')
+    if (data.type === 'player_left' || data.type === 'leave') {
+      if (typeof data.memberCount === 'number') {
+        this.serverPlayerCount = data.memberCount;
+      } else {
+        this.serverPlayerCount = Math.max(1, this.remotePlayers.size);
+      }
+
       const actor = this.remotePlayers.get(senderId);
       if (actor) {
         actor.destroy(this.scene);
         this.remotePlayers.delete(senderId);
         this.onPlayerLeft?.(name);
-        this.onConnectionChanged?.(this.isConnected, this.remotePlayers.size + 1);
+        this.onConnectionChanged?.(this.isConnected, this.serverPlayerCount, this.connectionMessage);
       }
       return;
     }
 
+    // Handle Chat
     if (data.type === 'chat') {
       this.onChatMessage?.(name, data.text as string);
       return;
     }
 
+    // Handle Player Transform / Appearance Update
     if (data.type === 'update') {
       let actor = this.remotePlayers.get(senderId);
       if (!actor) {
@@ -341,7 +553,8 @@ export class MultiplayerManager {
         actor = new RemotePlayerActor(state, this.scene);
         this.remotePlayers.set(senderId, actor);
         this.onPlayerJoined?.(name);
-        this.onConnectionChanged?.(this.isConnected, this.remotePlayers.size + 1);
+        this.serverPlayerCount = Math.max(this.serverPlayerCount, this.remotePlayers.size + 1);
+        this.onConnectionChanged?.(this.isConnected, this.serverPlayerCount, this.connectionMessage);
       }
 
       // Update target transform
@@ -370,6 +583,13 @@ export class MultiplayerManager {
     if (this.sendTimer >= 0.06) {
       this.sendTimer = 0;
       this.sendLocalState(localPos, localRotY, speed, isAirborne, isDriving, appearance);
+    }
+
+    // Send ping every 5 seconds for latency measurement
+    this.pingTimer += delta;
+    if (this.pingTimer >= 5.0) {
+      this.pingTimer = 0;
+      this.sendPing();
     }
 
     // Update all remote players
