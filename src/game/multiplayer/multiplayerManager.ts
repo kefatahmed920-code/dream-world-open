@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { CharacterRig, CharacterAppearance } from '../character/characterModel';
+import { NetworkConfig } from '../config/networkConfig';
 
 export interface RemotePlayerState {
   id: string;
@@ -159,8 +160,11 @@ export class MultiplayerManager {
 
     // 2. Initialize WebSocket transport if available
     try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/game?room=${this.currentRoom}&id=${this.localPlayerId}&name=${encodeURIComponent(this.localPlayerName)}`;
+      const wsUrl = NetworkConfig.getGameWebSocketUrl({
+        room: this.currentRoom,
+        id: this.localPlayerId,
+        name: encodeURIComponent(this.localPlayerName),
+      });
       this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {

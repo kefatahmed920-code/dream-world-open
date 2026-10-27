@@ -34,7 +34,17 @@ class SoundManager {
   private lastFootstepTime = 0;
 
   constructor() {
-    // Initialized on first user interaction to comply with browser autoplay policy
+    // Automatically unlock AudioContext on the very first user interaction (critical for Android touchscreens)
+    if (typeof window !== 'undefined') {
+      const unlock = () => {
+        this.resume();
+      };
+      window.addEventListener('touchstart', unlock, { passive: true, once: true });
+      window.addEventListener('touchend', unlock, { passive: true, once: true });
+      window.addEventListener('pointerdown', unlock, { passive: true, once: true });
+      window.addEventListener('click', unlock, { passive: true, once: true });
+      window.addEventListener('keydown', unlock, { passive: true, once: true });
+    }
   }
 
   private initContext() {

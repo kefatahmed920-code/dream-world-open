@@ -1,0 +1,16 @@
+[
+  {
+    "uid": "DW-XNRX4C",
+    "email": "player@dreamworld.com",
+    "passwordHash": "bXlwYXNzd29yZDEyMw==",
+    "displayName": "RahimHero",
+    "createdAt": 1793099270043,
+    "lastLoginAt": 1793099273194,
+    "stats": {
+      "level": 1,
+      "taka": 500,
+      "questsCompleted": 0,
+      "distanceExploredKm": 0
+    }
+  }
+]

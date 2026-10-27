@@ -4,21 +4,71 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Play, Download, Sparkles, Compass, ShieldCheck, Users, HelpCircle, Share2, Globe, Wifi } from 'lucide-react';
+import {
+  Play,
+  Download,
+  Sparkles,
+  Compass,
+  ShieldCheck,
+  Users,
+  Share2,
+  Trophy,
+  User,
+  Scissors,
+  Bell,
+  Wifi,
+  CheckCircle2,
+} from 'lucide-react';
 import { soundManager } from '../audio/soundManager';
+import { authManager, PlayerAccount } from '../auth/authManager';
+import { retentionManager } from '../pwa/retentionNotification';
+import { NetworkConfig } from '../config/networkConfig';
 
 interface TitleScreenProps {
   onStartGame: (mode: 'single' | 'multiplayer') => void;
   onOpenInstallModal: () => void;
   onOpenPublishGuide: () => void;
+  onOpenLeaderboard: () => void;
+  onOpenAuth: () => void;
+  onOpenProfile: () => void;
+  onOpenCharacterSelect: () => void;
 }
 
 export const TitleScreen: React.FC<TitleScreenProps> = ({
   onStartGame,
   onOpenInstallModal,
   onOpenPublishGuide,
+  onOpenLeaderboard,
+  onOpenAuth,
+  onOpenProfile,
+  onOpenCharacterSelect,
 }) => {
   const [selectedMode, setSelectedMode] = useState<'single' | 'multiplayer'>('single');
+  const [user, setUser] = useState<PlayerAccount | null>(authManager.getCurrentUser());
+  const [onlineCount, setOnlineCount] = useState<number>(1);
+  const [notificationsActive, setNotificationsActive] = useState<boolean>(retentionManager.isEnabled());
+
+  useEffect(() => {
+    const unsub = authManager.subscribe((acc) => setUser(acc));
+    return () => unsub();
+  }, []);
+
+  // Poll server stats for live player count
+  useEffect(() => {
+    const fetchStats = () => {
+      fetch(NetworkConfig.getApiUrl('/api/stats'))
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && typeof data.totalOnline === 'number') {
+            setOnlineCount(Math.max(1, data.totalOnline));
+          }
+        })
+        .catch(() => {});
+    };
+    fetchStats();
+    const interval = setInterval(fetchStats, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -32,47 +82,115 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onStartGame, selectedMode]);
 
+  const handleToggleNotifications = async () => {
+    soundManager.playUiClick();
+    if (!notificationsActive) {
+      const granted = await retentionManager.requestPermission();
+      setNotificationsActive(granted);
+    }
+  };
+
   return (
-    <div className="absolute inset-0 z-40 flex flex-col justify-between p-4 sm:p-6 md:p-10 select-none pointer-events-auto bg-gradient-to-t from-slate-950 via-slate-950/60 to-slate-950/20 overflow-y-auto">
-      {/* Top Banner / Quality Badges */}
+    <div className="absolute inset-0 z-40 flex flex-col justify-between p-3 sm:p-6 md:p-8 select-none pointer-events-auto bg-gradient-to-t from-slate-950 via-slate-950/70 to-slate-950/30 overflow-y-auto">
+      {/* Top Banner: Status, Auth, Leaderboard, and Share */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2 bg-slate-900/90 text-emerald-400 border border-emerald-500/40 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-lg backdrop-blur-xs">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>AAA 3D OPEN-WORLD · BANGLADESH</span>
+        <div className="flex items-center gap-2">
+          {/* Live Online Ticker */}
+          <div className="flex items-center gap-2 bg-slate-900/90 text-emerald-400 border border-emerald-500/40 px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg backdrop-blur-xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span>{onlineCount} LIVE PLAYERS · DHAKA HUB</span>
+          </div>
+
+          {/* Leaderboard Button */}
+          <button
+            onClick={() => {
+              soundManager.playUiClick();
+              onOpenLeaderboard();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-amber-300 text-xs font-bold border border-amber-500/40 transition shadow"
+          >
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            <span>Leaderboard</span>
+          </button>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Free Share & Publish Link Guide Button */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Notifications Daily Alert Opt-In */}
+          <button
+            onClick={handleToggleNotifications}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition shadow ${
+              notificationsActive
+                ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
+                : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300'
+            }`}
+            title="Get alerts for new quests and co-op events"
+          >
+            <Bell className="w-3.5 h-3.5" />
+            <span>{notificationsActive ? 'Alerts On' : 'Enable Daily Alerts'}</span>
+          </button>
+
+          {/* User Account / Profile Button */}
+          {user ? (
+            <button
+              onClick={() => {
+                soundManager.playUiClick();
+                onOpenProfile();
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/90 hover:bg-slate-700 border border-emerald-500/50 text-white text-xs font-bold transition shadow"
+            >
+              <div className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center font-black text-[10px]">
+                {user.displayName.charAt(0).toUpperCase()}
+              </div>
+              <span className="max-w-[100px] truncate">{user.displayName}</span>
+              <span className="text-[10px] text-emerald-400 font-mono">({user.uid})</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                soundManager.playUiClick();
+                onOpenAuth();
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/60 text-emerald-300 text-xs font-bold transition shadow"
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Sign In / Register</span>
+            </button>
+          )}
+
+          {/* Publish & Share Guide */}
           <button
             onClick={() => {
               soundManager.playUiClick();
               onOpenPublishGuide();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition-colors shadow"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition shadow"
           >
             <Share2 className="w-3.5 h-3.5 text-amber-400" />
-            <span>প্রকাশ ও শেয়ার গাইড</span>
+            <span className="hidden sm:inline">Guide</span>
           </button>
 
-          {/* Optional Install Game Button */}
+          {/* Install Game Button */}
           <button
             onClick={() => {
               soundManager.playUiClick();
               onOpenInstallModal();
             }}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-800/90 hover:bg-emerald-950 text-emerald-300 hover:text-emerald-200 text-xs font-bold border border-emerald-500/50 transition-colors shadow"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-800/90 hover:bg-emerald-950 text-emerald-300 hover:text-emerald-200 text-xs font-bold border border-emerald-500/50 transition shadow"
           >
             <Download className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Install Game (ইনস্টল)</span>
+            <span>Install</span>
           </button>
         </div>
       </div>
 
-      {/* Center: Bespoke Inline SVG Title Lockup & Subtitle */}
-      <div className="flex flex-col items-center justify-center text-center my-auto max-w-3xl mx-auto space-y-4 py-4">
-        {/* Inline SVG Title Lockup */}
-        <div className="w-full max-w-lg">
-          <svg viewBox="0 0 500 110" className="w-full h-auto drop-shadow-2xl">
+      {/* Center: Bangladeshi Character & Map Logo Lockup */}
+      <div className="flex flex-col items-center justify-center text-center my-auto max-w-3xl mx-auto space-y-4 py-3">
+        {/* Bespoke Logo with Bangladesh Map, River Bridge & Character Silhouette */}
+        <div className="w-full max-w-md">
+          <svg viewBox="0 0 520 125" className="w-full h-auto drop-shadow-2xl">
             <defs>
               <linearGradient id="titleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="#34d399" />
@@ -88,8 +206,8 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               </filter>
             </defs>
             <text
-              x="250"
-              y="60"
+              x="260"
+              y="68"
               textAnchor="middle"
               fontFamily="Impact, system-ui, sans-serif"
               fontSize="68"
@@ -101,13 +219,13 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               DREAM WORLD
             </text>
             <text
-              x="250"
-              y="98"
+              x="260"
+              y="108"
               textAnchor="middle"
               fontFamily="'Segoe UI', Arial, sans-serif"
               fontSize="20"
               fontWeight="700"
-              letterSpacing="8"
+              letterSpacing="7"
               fill="#e2e8f0"
             >
               স্বপ্নের ভুবন · 3D ADVENTURE
@@ -116,8 +234,20 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         </div>
 
         <p className="text-slate-200 text-xs sm:text-sm md:text-base max-w-xl mx-auto font-medium leading-relaxed drop-shadow-md">
-          Explore a realistic continuous open world: modern Dhaka streets with tea stalls, the majestic Padma River bridge, Shonar village paddy fields, and the cascading Sylhet waterfall.
+          Continuous open-world Bangladesh: vibrant Dhanmondi avenues, tea stalls, flyovers, Padma bridge, lush green villages, and Sylhet waterfalls.
         </p>
+
+        {/* Character Customizer Quick CTA */}
+        <button
+          onClick={() => {
+            soundManager.playUiClick();
+            onOpenCharacterSelect();
+          }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-emerald-500/40 text-emerald-300 text-xs font-bold shadow-lg transition active:scale-95"
+        >
+          <Scissors className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Customize Character (চরিত্র নির্বাচন ও সাজসজ্জা)</span>
+        </button>
 
         {/* Mode Selector: Single Player vs Online Multiplayer */}
         <div className="flex items-center gap-2 p-1 bg-slate-900/90 rounded-2xl border border-slate-700/80 shadow-lg">
@@ -153,7 +283,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         </div>
 
         {/* Action CTAs: PLAY NOW & INSTALL GAME */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3 w-full max-w-md">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2 w-full max-w-md">
           {/* Primary PLAY NOW Button */}
           <button
             onClick={() => {

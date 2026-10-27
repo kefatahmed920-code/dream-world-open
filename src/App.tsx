@@ -16,6 +16,12 @@ import { MultiplayerModal } from './game/ui/MultiplayerModal';
 import { PWAInstallModal } from './game/pwa/PWAInstallModal';
 import { PublishGuideModal } from './game/ui/PublishGuideModal';
 import { OfflineIndicator } from './game/pwa/OfflineIndicator';
+import { AuthModal } from './game/ui/AuthModal';
+import { ProfileModal } from './game/ui/ProfileModal';
+import { CharacterSelectModal } from './game/ui/CharacterSelectModal';
+import { LeaderboardModal } from './game/ui/LeaderboardModal';
+import { authManager, PlayerAccount } from './game/auth/authManager';
+import { CharacterAppearance, DEFAULT_PLAYER_APPEARANCE } from './game/character/characterModel';
 import { ActiveNPC } from './game/character/npcManager';
 import { ActiveVehicle } from './game/vehicles/vehicleManager';
 import { Quest, PlayerStats, GameSettings, WeatherType } from './game/types';
@@ -35,6 +41,24 @@ export default function App() {
   const [isMultiplayerOpen, setIsMultiplayerOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isPublishGuideOpen, setIsPublishGuideOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isCharacterSelectOpen, setIsCharacterSelectOpen] = useState(false);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<PlayerAccount | null>(authManager.getCurrentUser());
+  const [playerAppearance, setPlayerAppearance] = useState<CharacterAppearance>(() => {
+    try {
+      const saved = localStorage.getItem('dream_player_appearance');
+      return saved ? JSON.parse(saved) : DEFAULT_PLAYER_APPEARANCE;
+    } catch {
+      return DEFAULT_PLAYER_APPEARANCE;
+    }
+  });
+
+  useEffect(() => {
+    const unsub = authManager.subscribe((acc) => setCurrentUser(acc));
+    return () => unsub();
+  }, []);
 
   // Dynamic HUD tracking state
   const [playerStats, setPlayerStats] = useState<PlayerStats>({
@@ -111,13 +135,28 @@ export default function App() {
       } else if (e.code === 'KeyI') {
         setIsInventoryOpen((prev) => !prev);
       } else if (e.code === 'Escape') {
-        if (activeDialogueNPC || isMapOpen || isInventoryOpen || isMultiplayerOpen || isInstallModalOpen || isPublishGuideOpen) {
+        if (
+          activeDialogueNPC ||
+          isMapOpen ||
+          isInventoryOpen ||
+          isMultiplayerOpen ||
+          isInstallModalOpen ||
+          isPublishGuideOpen ||
+          isAuthOpen ||
+          isProfileOpen ||
+          isCharacterSelectOpen ||
+          isLeaderboardOpen
+        ) {
           setActiveDialogueNPC(null);
           setIsMapOpen(false);
           setIsInventoryOpen(false);
           setIsMultiplayerOpen(false);
           setIsInstallModalOpen(false);
           setIsPublishGuideOpen(false);
+          setIsAuthOpen(false);
+          setIsProfileOpen(false);
+          setIsCharacterSelectOpen(false);
+          setIsLeaderboardOpen(false);
         } else {
           setIsSettingsOpen((prev) => !prev);
         }
@@ -187,6 +226,10 @@ export default function App() {
           onStartGame={handleStartGame}
           onOpenInstallModal={() => setIsInstallModalOpen(true)}
           onOpenPublishGuide={() => setIsPublishGuideOpen(true)}
+          onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
+          onOpenAuth={() => setIsAuthOpen(true)}
+          onOpenProfile={() => setIsProfileOpen(true)}
+          onOpenCharacterSelect={() => setIsCharacterSelectOpen(true)}
         />
       )}
 
@@ -207,6 +250,9 @@ export default function App() {
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenMultiplayer={() => setIsMultiplayerOpen(true)}
             onOpenInstallModal={() => setIsInstallModalOpen(true)}
+            onOpenProfile={() => setIsProfileOpen(true)}
+            onOpenCharacterSelect={() => setIsCharacterSelectOpen(true)}
+            onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
           />
 
           {/* On-Screen Mobile Joystick Controls */}
@@ -307,6 +353,42 @@ export default function App() {
       <PublishGuideModal
         isOpen={isPublishGuideOpen}
         onClose={() => setIsPublishGuideOpen(false)}
+      />
+
+      {/* Auth Modal (Login / Register / Guest / Reset) */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onSuccess={(acc) => {
+          setCurrentUser(acc);
+          showToast(`Signed in as ${acc.displayName} (${acc.uid})`, 'WELCOME');
+        }}
+      />
+
+      {/* Player Profile & Stats Modal */}
+      <ProfileModal
+        isOpen={isProfileOpen}
+        user={currentUser}
+        onClose={() => setIsProfileOpen(false)}
+        onOpenAuth={() => setIsAuthOpen(true)}
+      />
+
+      {/* 3D Turntable Character Customizer & Presets */}
+      <CharacterSelectModal
+        isOpen={isCharacterSelectOpen}
+        currentAppearance={playerAppearance}
+        onSave={(newApp) => {
+          setPlayerAppearance(newApp);
+          engineRef.current?.setPlayerAppearance(newApp);
+        }}
+        onClose={() => setIsCharacterSelectOpen(false)}
+      />
+
+      {/* Global Live Leaderboard Modal */}
+      <LeaderboardModal
+        isOpen={isLeaderboardOpen}
+        currentUser={currentUser}
+        onClose={() => setIsLeaderboardOpen(false)}
       />
     </div>
   );

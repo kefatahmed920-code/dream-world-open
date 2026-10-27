@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { CharacterRig } from './character/characterModel';
+import { CharacterRig, CharacterAppearance, DEFAULT_PLAYER_APPEARANCE } from './character/characterModel';
 import { NPCManager, ActiveNPC } from './character/npcManager';
 import { WorldTerrain } from './world/terrain';
 import { VehicleManager, ActiveVehicle } from './vehicles/vehicleManager';
@@ -138,7 +138,12 @@ export class GameEngine {
     };
 
     // Player 3D Rig (Spawns in Dhanmondi City center at [6, 0, 12])
-    this.playerRig = new CharacterRig();
+    let initialAppearance: CharacterAppearance = DEFAULT_PLAYER_APPEARANCE;
+    try {
+      const saved = localStorage.getItem('dream_player_appearance');
+      if (saved) initialAppearance = JSON.parse(saved);
+    } catch {}
+    this.playerRig = new CharacterRig(initialAppearance);
     const spawnY = this.terrain.getTerrainHeight(6, 12);
     this.playerRig.group.position.set(6, spawnY, 12);
     this.scene.add(this.playerRig.group);
@@ -547,6 +552,20 @@ export class GameEngine {
     this.playerRig.group.position.set(x, y, z);
     this.playerVelocity.set(0, 0, 0);
     this.callbacks.onNotification?.(`Fast travelled to [${Math.round(x)}, ${Math.round(z)}]`, 'TELEPORT');
+  }
+
+  public setPlayerAppearance(appearance: CharacterAppearance) {
+    const curPos = this.playerRig.group.position.clone();
+    const curRot = this.playerRig.group.rotation.y;
+    this.scene.remove(this.playerRig.group);
+
+    this.playerRig = new CharacterRig(appearance);
+    this.playerRig.group.position.copy(curPos);
+    this.playerRig.group.rotation.y = curRot;
+    this.scene.add(this.playerRig.group);
+
+    localStorage.setItem('dream_player_appearance', JSON.stringify(appearance));
+    this.callbacks.onNotification?.('Character appearance updated!', 'AVATAR EQUIPPED');
   }
 
   public dispose() {

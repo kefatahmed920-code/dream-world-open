@@ -18,6 +18,9 @@ import {
   Navigation,
   Users,
   Download,
+  User,
+  Scissors,
+  Trophy,
 } from 'lucide-react';
 import { PlayerStats, Quest } from '../types';
 import { ActiveVehicle } from '../vehicles/vehicleManager';
@@ -37,6 +40,9 @@ interface HUDProps {
   onOpenSettings: () => void;
   onOpenMultiplayer: () => void;
   onOpenInstallModal: () => void;
+  onOpenProfile?: () => void;
+  onOpenCharacterSelect?: () => void;
+  onOpenLeaderboard?: () => void;
   onTeleportToQuest?: () => void;
 }
 
@@ -54,6 +60,9 @@ export const HUD: React.FC<HUDProps> = ({
   onOpenSettings,
   onOpenMultiplayer,
   onOpenInstallModal,
+  onOpenProfile,
+  onOpenCharacterSelect,
+  onOpenLeaderboard,
 }) => {
   const [isDockCollapsed, setIsDockCollapsed] = useState(false);
   const [isMuted, setIsMuted] = useState(soundManager.getIsMuted());
@@ -308,6 +317,42 @@ export const HUD: React.FC<HUDProps> = ({
               <Package className="w-4 h-4 text-sky-400" />
               <span>Bag</span>
             </button>
+
+            {/* Profile Button */}
+            {onOpenProfile && (
+              <button
+                onClick={onOpenProfile}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600/40 transition-colors"
+                title="Player Profile & Permanent UID"
+              >
+                <User className="w-4 h-4 text-cyan-400" />
+                <span>ID</span>
+              </button>
+            )}
+
+            {/* Character Customizer Button */}
+            {onOpenCharacterSelect && (
+              <button
+                onClick={onOpenCharacterSelect}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600/40 transition-colors"
+                title="Customize Character & Outfit"
+              >
+                <Scissors className="w-4 h-4 text-pink-400" />
+                <span>Avatar</span>
+              </button>
+            )}
+
+            {/* Leaderboard Button */}
+            {onOpenLeaderboard && (
+              <button
+                onClick={onOpenLeaderboard}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600/40 transition-colors"
+                title="Global Leaderboard"
+              >
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <span>Ranks</span>
+              </button>
+            )}
 
             {/* Multiplayer Button */}
             <button

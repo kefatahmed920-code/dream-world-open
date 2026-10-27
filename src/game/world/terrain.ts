@@ -706,6 +706,93 @@ export class WorldTerrain {
         awningC1: '#0f766e',
         awningC2: '#ffffff',
       },
+      // Expanded 4-Direction Grid: North Commercial Plaza
+      {
+        x: -42,
+        z: -68,
+        w: 22,
+        d: 16,
+        h: 44,
+        color: 0x0f172a,
+        shopTitle: 'গুলশান গ্র্যান্ড হোটেল ও রেস্তোরাঁ',
+        sub: 'GULSHAN GRAND HOTEL & LUXURY SUITES',
+        theme: '#b45309',
+        accent: '#fde047',
+        awningC1: '#b45309',
+        awningC2: '#fde047',
+      },
+      {
+        x: 10,
+        z: -68,
+        w: 18,
+        d: 14,
+        h: 38,
+        color: 0x1e1e24,
+        shopTitle: 'ধানমন্ডি বুক ক্যাফে ও লাইব্রেরি',
+        sub: 'DHANMONDI BOOK CAFE & ROASTERY',
+        theme: '#065f46',
+        accent: '#6ee7b7',
+        awningC1: '#065f46',
+        awningC2: '#ffffff',
+      },
+      // Expanded 4-Direction Grid: South Waterfront Avenue
+      {
+        x: -42,
+        z: 48,
+        w: 20,
+        d: 15,
+        h: 32,
+        color: 0x334155,
+        shopTitle: 'পদ্মা টেলিকম ও আইটি হাব',
+        sub: 'PADMA TELECOM & DIGITAL TECH',
+        theme: '#0284c7',
+        accent: '#bae6fd',
+        awningC1: '#0284c7',
+        awningC2: '#ffffff',
+      },
+      {
+        x: 12,
+        z: 48,
+        w: 16,
+        d: 14,
+        h: 30,
+        color: 0xd97706,
+        shopTitle: 'সুরমা মিষ্টি ভাণ্ডার',
+        sub: 'SURMA TRADITIONAL SWEETS & BAKERY',
+        theme: '#c2410c',
+        accent: '#fef08a',
+        awningC1: '#ea580c',
+        awningC2: '#fef08a',
+      },
+      // Expanded 4-Direction Grid: Westward Boulevard
+      {
+        x: -110,
+        z: 22,
+        w: 22,
+        d: 15,
+        h: 36,
+        color: 0x1e293b,
+        shopTitle: 'রূপসী বাংলা ফ্যাশন হাউস',
+        sub: 'RUPOSHI BANGLA FASHION & BOUTIQUE',
+        theme: '#9333ea',
+        accent: '#f3e8ff',
+        awningC1: '#9333ea',
+        awningC2: '#fef08a',
+      },
+      {
+        x: -110,
+        z: -18,
+        w: 22,
+        d: 16,
+        h: 40,
+        color: 0x0f766e,
+        shopTitle: 'মেঘনা সুপারস্টোর',
+        sub: 'MEGHNA SUPERSTORE & BAZAAR',
+        theme: '#047857',
+        accent: '#a7f3d0',
+        awningC1: '#047857',
+        awningC2: '#ffffff',
+      },
     ];
 
     for (const b of buildingsData) {
@@ -725,14 +812,36 @@ export class WorldTerrain {
       );
     }
 
-    // Street Lamps along the Avenue
-    for (let lx = -90; lx <= 40; lx += 25) {
+    // 5. Intersecting Secondary Grid Roads (North Ave, South Ave, Riverfront Ave)
+    const northAveGeo = new THREE.PlaneGeometry(160, 11);
+    northAveGeo.rotateX(-Math.PI / 2);
+    const northAve = new THREE.Mesh(northAveGeo, roadMat);
+    northAve.position.set(-45, 0.03, -50);
+    northAve.receiveShadow = true;
+    this.group.add(northAve);
+
+    const southAveGeo = new THREE.PlaneGeometry(160, 11);
+    southAveGeo.rotateX(-Math.PI / 2);
+    const southAve = new THREE.Mesh(southAveGeo, roadMat);
+    southAve.position.set(-45, 0.03, 35);
+    southAve.receiveShadow = true;
+    this.group.add(southAve);
+
+    const eastRiverRoadGeo = new THREE.PlaneGeometry(12, 110);
+    eastRiverRoadGeo.rotateX(-Math.PI / 2);
+    const eastRiverRoad = new THREE.Mesh(eastRiverRoadGeo, roadMat);
+    eastRiverRoad.position.set(30, 0.03, -8);
+    eastRiverRoad.receiveShadow = true;
+    this.group.add(eastRiverRoad);
+
+    // Street Lamps along Main Avenue & Grid
+    for (let lx = -130; lx <= 40; lx += 25) {
       this.buildStreetLamp(lx, 10.5);
       this.buildStreetLamp(lx, -4.5);
     }
 
-    // Roadside Planter Trees along the sidewalk
-    for (let tx = -85; tx <= 35; tx += 20) {
+    // Roadside Planter Trees along sidewalks
+    for (let tx = -120; tx <= 35; tx += 20) {
       this.buildRoadsideTree(tx, 14.5);
       this.buildRoadsideTree(tx, -8.5);
     }

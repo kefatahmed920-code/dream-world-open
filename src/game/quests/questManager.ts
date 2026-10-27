@@ -5,6 +5,9 @@
 
 import { Quest, InventoryItem, DialogueNode, PlayerStats } from '../types';
 import { soundManager } from '../audio/soundManager';
+import { authManager } from '../auth/authManager';
+import { NetworkConfig } from '../config/networkConfig';
+import { retentionManager } from '../pwa/retentionNotification';
 
 export const INITIAL_INVENTORY: InventoryItem[] = [
   {
@@ -380,9 +383,15 @@ export class QuestManager {
     // Rewards
     this.playerStats.money += quest.rewardMoney;
     this.playerStats.exp += quest.rewardExp;
+    let didLevelUp = false;
     if (this.playerStats.exp >= this.playerStats.level * 250) {
       this.playerStats.level++;
+      didLevelUp = true;
       this.onNotification?.(`Level Up! You are now Level ${this.playerStats.level}`, 'LEVEL UP');
+      retentionManager.sendImmediateNotification({
+        title: `Level Up! Level ${this.playerStats.level}`,
+        body: `Congratulations! You leveled up in Dhaka Open World!`,
+      });
     }
 
     if (quest.rewardItem) {
@@ -393,6 +402,36 @@ export class QuestManager {
       `Quest Completed: ${quest.title} (+৳${quest.rewardMoney}, +${quest.rewardExp} EXP)`,
       'CONGRATULATIONS!',
     );
+
+    retentionManager.sendImmediateNotification({
+      title: `Quest Completed: ${quest.title}`,
+      body: `Reward earned: ৳${quest.rewardMoney} Taka & ${quest.rewardExp} EXP!`,
+    });
+
+    // Sync updated stats to player account
+    const completedQuestsCount = this.quests.filter((q) => q.status === 'completed').length;
+    authManager.updateStats({
+      level: this.playerStats.level,
+      taka: this.playerStats.money,
+      questsCompleted: completedQuestsCount,
+    });
+
+    // Asynchronously submit live score to backend leaderboard
+    try {
+      const user = authManager.getCurrentUser();
+      const playerName = user?.displayName || localStorage.getItem('dream_player_name') || 'Explorer';
+      fetch(NetworkConfig.getApiUrl('/api/leaderboard'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid: user?.uid,
+          name: playerName,
+          level: this.playerStats.level,
+          taka: this.playerStats.money,
+          quests: completedQuestsCount,
+        }),
+      }).catch(() => {});
+    } catch {}
 
     // Auto-activate next available quest
     const nextQ = this.quests.find((q) => q.status === 'available');

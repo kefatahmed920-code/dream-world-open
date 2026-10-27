@@ -4,9 +4,10 @@
  */
 
 import React, { useState } from 'react';
-import { Users, X, Send, Wifi, WifiOff, Globe, Sparkles, MessageSquare } from 'lucide-react';
+import { Users, X, Send, Wifi, WifiOff, Globe, Sparkles, MessageSquare, Server, CheckCircle2, AlertCircle } from 'lucide-react';
 import { MultiplayerManager } from '../multiplayer/multiplayerManager';
 import { soundManager } from '../audio/soundManager';
+import { NetworkConfig } from '../config/networkConfig';
 
 interface MultiplayerModalProps {
   multiplayerManager: MultiplayerManager;
@@ -24,6 +25,34 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
   const [chatInput, setChatInput] = useState('');
   const [isOnline, setIsOnline] = useState(multiplayerManager.isOnlineMode);
   const [chatMessages, setChatMessages] = useState<{ sender: string; text: string; time: string }[]>([]);
+  const [backendUrl, setBackendUrl] = useState(NetworkConfig.getCustomBackendUrl());
+  const [showServerConfig, setShowServerConfig] = useState(NetworkConfig.isGitHubPages() && !NetworkConfig.getCustomBackendUrl());
+  const [serverPingStatus, setServerPingStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [pingMessage, setPingMessage] = useState('');
+
+  const handleTestBackend = async () => {
+    soundManager.playUiClick();
+    setServerPingStatus('testing');
+    setPingMessage('Testing connection to backend...');
+    try {
+      NetworkConfig.setCustomBackendUrl(backendUrl);
+      const testUrl = NetworkConfig.getApiUrl('/api/health');
+      const start = performance.now();
+      const res = await fetch(testUrl);
+      const ms = Math.round(performance.now() - start);
+      if (res.ok) {
+        const data = await res.json();
+        setServerPingStatus('success');
+        setPingMessage(`Connected! Ping: ${ms}ms (${data.activePlayers || 0} online)`);
+      } else {
+        setServerPingStatus('error');
+        setPingMessage(`Server responded with HTTP ${res.status}`);
+      }
+    } catch {
+      setServerPingStatus('error');
+      setPingMessage('Could not reach server. Check URL or ensure server is running.');
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -144,6 +173,74 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
               placeholder="Dhaka-Hub-1"
             />
           </div>
+        </div>
+
+        {/* Backend Server Connection Setting */}
+        <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-2.5 text-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setShowServerConfig((prev) => !prev)}
+              className="flex items-center gap-2 text-slate-300 hover:text-white font-semibold"
+            >
+              <Server className="w-4 h-4 text-emerald-400" />
+              <span>Multiplayer Backend Server</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
+                {backendUrl ? 'Custom Host' : (NetworkConfig.isGitHubPages() ? 'Needs Server' : 'Default Origin')}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowServerConfig((prev) => !prev)}
+              className="text-[11px] text-emerald-400 hover:underline"
+            >
+              {showServerConfig ? 'Hide' : 'Configure'}
+            </button>
+          </div>
+
+          {showServerConfig && (
+            <div className="space-y-2 pt-1">
+              <div className="text-[11px] text-slate-400 leading-relaxed">
+                {NetworkConfig.isGitHubPages() ? (
+                  <span className="text-amber-300">
+                    GitHub Pages detected: GitHub hosts static web files only. Enter your deployed backend server URL (e.g. from Render or Cloud Run) to connect online.
+                  </span>
+                ) : (
+                  'Deploy your server.ts to any Node.js host (Render, Railway, Cloud Run) and paste the URL here, or leave empty for same origin.'
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={backendUrl}
+                  onChange={(e) => setBackendUrl(e.target.value)}
+                  placeholder="https://your-server-name.onrender.com"
+                  className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:border-emerald-500 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleTestBackend}
+                  disabled={serverPingStatus === 'testing'}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-emerald-400 flex items-center gap-1.5"
+                >
+                  {serverPingStatus === 'testing' ? 'Testing...' : 'Test & Save'}
+                </button>
+              </div>
+
+              {pingMessage && (
+                <div className={`text-[11px] flex items-center gap-1.5 ${
+                  serverPingStatus === 'success' ? 'text-emerald-400' : 'text-rose-400'
+                }`}>
+                  {serverPingStatus === 'success' ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  )}
+                  <span>{pingMessage}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Live Multiplayer Status & Chat */}

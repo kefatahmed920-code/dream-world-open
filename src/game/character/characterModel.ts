@@ -6,9 +6,10 @@
 import * as THREE from 'three';
 
 export interface CharacterAppearance {
+  gender?: 'male' | 'female';
   skinTone: string;
   hairColor: string;
-  hairStyle: 'short' | 'styled' | 'wavy' | 'buzz';
+  hairStyle: 'short' | 'styled' | 'wavy' | 'buzz' | 'ponytail' | 'braid' | 'bob';
   shirtColor: string;
   jacketColor?: string;
   pantsColor: string;
@@ -16,19 +17,144 @@ export interface CharacterAppearance {
   hasJacket?: boolean;
   hasGamcha?: boolean;
   hasGlasses?: boolean;
+  hasDupatta?: boolean;
 }
 
-export const DEFAULT_PLAYER_APPEARANCE: CharacterAppearance = {
-  skinTone: '#c68a62', // Warm South Asian tone
-  hairColor: '#1a1614',
-  hairStyle: 'styled',
-  shirtColor: '#2b5c8f', // Modern denim blue jacket
-  jacketColor: '#1d3e64',
-  pantsColor: '#222831', // Dark charcoal denim
-  shoesColor: '#eeeeee', // Clean white sneakers
-  hasJacket: true,
-  hasGlasses: false,
+export const CHARACTER_PRESETS: Record<string, { name: string; title: string; appearance: CharacterAppearance }> = {
+  tanvir: {
+    name: 'Tanvir',
+    title: 'Dhaka Urban Nomad',
+    appearance: {
+      gender: 'male',
+      skinTone: '#c68a62',
+      hairColor: '#1a1614',
+      hairStyle: 'styled',
+      shirtColor: '#2b5c8f',
+      jacketColor: '#1d3e64',
+      pantsColor: '#222831',
+      shoesColor: '#eeeeee',
+      hasJacket: true,
+      hasGlasses: false,
+    },
+  },
+  rifat: {
+    name: 'Rifat',
+    title: 'Street Cruiser',
+    appearance: {
+      gender: 'male',
+      skinTone: '#b57b53',
+      hairColor: '#111111',
+      hairStyle: 'short',
+      shirtColor: '#e11d48',
+      jacketColor: '#18181b',
+      pantsColor: '#1e293b',
+      shoesColor: '#f59e0b',
+      hasJacket: true,
+      hasGlasses: true,
+    },
+  },
+  farhan: {
+    name: 'Farhan',
+    title: 'Old Dhaka Folk',
+    appearance: {
+      gender: 'male',
+      skinTone: '#d49b73',
+      hairColor: '#262626',
+      hairStyle: 'wavy',
+      shirtColor: '#15803d',
+      jacketColor: '#14532d',
+      pantsColor: '#f8fafc',
+      shoesColor: '#78350f',
+      hasJacket: false,
+      hasGamcha: true,
+      hasGlasses: false,
+    },
+  },
+  nafis: {
+    name: 'Nafis',
+    title: 'Dhanmondi Tech Explorer',
+    appearance: {
+      gender: 'male',
+      skinTone: '#bd8058',
+      hairColor: '#1c1917',
+      hairStyle: 'buzz',
+      shirtColor: '#0284c7',
+      jacketColor: '#334155',
+      pantsColor: '#475569',
+      shoesColor: '#0284c7',
+      hasJacket: true,
+      hasGlasses: true,
+    },
+  },
+  ananya: {
+    name: 'Ananya',
+    title: 'University Scholar',
+    appearance: {
+      gender: 'female',
+      skinTone: '#d99c73',
+      hairColor: '#1a1614',
+      hairStyle: 'ponytail',
+      shirtColor: '#0d9488',
+      jacketColor: '#115e59',
+      pantsColor: '#1e293b',
+      shoesColor: '#f1f5f9',
+      hasJacket: true,
+      hasGlasses: true,
+    },
+  },
+  nusrat: {
+    name: 'Nusrat',
+    title: 'Elegance & Heritage',
+    appearance: {
+      gender: 'female',
+      skinTone: '#c88c64',
+      hairColor: '#171717',
+      hairStyle: 'braid',
+      shirtColor: '#be123c',
+      jacketColor: '#881337',
+      pantsColor: '#881337',
+      shoesColor: '#d97706',
+      hasJacket: false,
+      hasDupatta: true,
+      hasGlasses: false,
+    },
+  },
+  meghla: {
+    name: 'Meghla',
+    title: 'Adventure Cyclist',
+    appearance: {
+      gender: 'female',
+      skinTone: '#b97a52',
+      hairColor: '#262626',
+      hairStyle: 'bob',
+      shirtColor: '#f59e0b',
+      jacketColor: '#b45309',
+      pantsColor: '#334155',
+      shoesColor: '#10b981',
+      hasJacket: true,
+      hasGlasses: false,
+    },
+  },
+  priya: {
+    name: 'Priya',
+    title: 'Bengal Arts Enthusiast',
+    appearance: {
+      gender: 'female',
+      skinTone: '#e0a982',
+      hairColor: '#1c1917',
+      hairStyle: 'wavy',
+      shirtColor: '#4338ca',
+      jacketColor: '#312e81',
+      pantsColor: '#475569',
+      shoesColor: '#ffffff',
+      hasJacket: false,
+      hasDupatta: true,
+      hasGlasses: true,
+    },
+  },
 };
+
+export const DEFAULT_PLAYER_APPEARANCE: CharacterAppearance = CHARACTER_PRESETS.tanvir.appearance;
 
 /**
  * Procedural PBR Textures for human character
@@ -295,46 +421,75 @@ export class CharacterRig {
     this.contactShadow.position.y = 0.02;
     this.group.add(this.contactShadow);
 
-    // --- SKELETON SETUP (Realistic proportions for 1.78m height) ---
+    const isFemale = appearance.gender === 'female';
+
+    // --- SKELETON SETUP (Realistic human anatomy with gendered proportions) ---
     // Pelvis center at y = 0.98m
     this.pelvis = new THREE.Group();
     this.pelvis.position.y = 0.98;
     this.root.add(this.pelvis);
 
-    // Pelvis Mesh
-    const pelvisGeo = new THREE.BoxGeometry(0.28, 0.16, 0.22);
+    // Pelvis Mesh (Female has slightly wider hips for realistic pelvic anatomy)
+    const pelvisWidth = isFemale ? 0.31 : 0.28;
+    const pelvisGeo = new THREE.BoxGeometry(pelvisWidth, 0.16, 0.22);
     const pelvisMesh = new THREE.Mesh(pelvisGeo, pantsMat);
     pelvisMesh.castShadow = true;
     pelvisMesh.receiveShadow = true;
     this.pelvis.add(pelvisMesh);
 
-    // Lower Spine
+    // Lower Spine & Waist (Female has narrower, defined waist)
     this.spineLower = new THREE.Group();
     this.spineLower.position.y = 0.1;
     this.pelvis.add(this.spineLower);
 
-    const abdomenGeo = new THREE.BoxGeometry(0.29, 0.18, 0.21);
+    const waistWidth = isFemale ? 0.25 : 0.29;
+    const abdomenGeo = new THREE.BoxGeometry(waistWidth, 0.18, isFemale ? 0.19 : 0.21);
     const abdomenMesh = new THREE.Mesh(abdomenGeo, shirtMat);
     abdomenMesh.position.y = 0.09;
     abdomenMesh.castShadow = true;
     this.spineLower.add(abdomenMesh);
 
-    // Upper Spine / Chest
+    // Upper Spine / Chest (Female: subtle contoured bust & slimmer ribcage; Male: broader athletic chest)
     this.spineUpper = new THREE.Group();
     this.spineUpper.position.y = 0.18;
     this.spineLower.add(this.spineUpper);
 
     const chestMat = appearance.hasJacket ? jacketMat : shirtMat;
-    const chestGeo = new THREE.BoxGeometry(0.35, 0.26, 0.24);
+    const chestWidth = isFemale ? 0.30 : 0.35;
+    const chestGeo = new THREE.BoxGeometry(chestWidth, 0.26, isFemale ? 0.21 : 0.24);
     const chestMesh = new THREE.Mesh(chestGeo, chestMat);
     chestMesh.position.y = 0.13;
     chestMesh.castShadow = true;
     chestMesh.receiveShadow = true;
     this.spineUpper.add(chestMesh);
 
+    // Female anatomical chest contour
+    if (isFemale) {
+      const bustGeo = new THREE.BoxGeometry(0.24, 0.11, 0.08);
+      const bustMesh = new THREE.Mesh(bustGeo, chestMat);
+      bustMesh.position.set(0, 0.12, 0.12);
+      bustMesh.castShadow = true;
+      this.spineUpper.add(bustMesh);
+    }
+
+    // Traditional Dupatta / Scarf drape (South Asian fashion)
+    if (appearance.hasDupatta) {
+      const dupattaMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(appearance.jacketColor || '#f59e0b'),
+        roughness: 0.9,
+      });
+      const drapeGeo = new THREE.BoxGeometry(0.12, 0.45, 0.06);
+      const drapeMesh = new THREE.Mesh(drapeGeo, dupattaMat);
+      drapeMesh.position.set(0.12, 0.05, 0.09);
+      drapeMesh.rotation.z = -0.15;
+      drapeMesh.castShadow = true;
+      this.spineUpper.add(drapeMesh);
+    }
+
     // Jacket collar/zipper accent
     if (appearance.hasJacket) {
-      const collarGeo = new THREE.BoxGeometry(0.24, 0.06, 0.25);
+      const collarWidth = isFemale ? 0.21 : 0.24;
+      const collarGeo = new THREE.BoxGeometry(collarWidth, 0.06, 0.23);
       const collarMesh = new THREE.Mesh(collarGeo, jacketMat);
       collarMesh.position.y = 0.26;
       this.spineUpper.add(collarMesh);
@@ -345,7 +500,8 @@ export class CharacterRig {
     this.neck.position.y = 0.27;
     this.spineUpper.add(this.neck);
 
-    const neckGeo = new THREE.CylinderGeometry(0.065, 0.075, 0.09, 12);
+    const neckRadius = isFemale ? 0.055 : 0.065;
+    const neckGeo = new THREE.CylinderGeometry(neckRadius, neckRadius + 0.01, 0.09, 12);
     const neckMesh = new THREE.Mesh(neckGeo, skinMat);
     neckMesh.position.y = 0.045;
     neckMesh.castShadow = true;
@@ -358,7 +514,6 @@ export class CharacterRig {
 
     // Cranium
     const headGeo = new THREE.BoxGeometry(0.19, 0.23, 0.21);
-    // Face material mapped on front (+z), skin elsewhere
     const headMaterials = [
       skinMat, // +x right
       skinMat, // -x left
@@ -372,17 +527,74 @@ export class CharacterRig {
     headMesh.castShadow = true;
     this.head.add(headMesh);
 
-    // Hair sculpt (styled bangs and volume)
-    const hairGeo = new THREE.BoxGeometry(0.21, 0.12, 0.23);
-    const hairMesh = new THREE.Mesh(hairGeo, hairMat);
-    hairMesh.position.set(0, 0.22, -0.01);
-    this.head.add(hairMesh);
+    // Dynamic Hair Styles
+    const style = appearance.hairStyle || 'styled';
+    if (style === 'styled' || style === 'short' || style === 'buzz') {
+      const hairGeo = new THREE.BoxGeometry(0.21, style === 'buzz' ? 0.06 : 0.12, 0.23);
+      const hairMesh = new THREE.Mesh(hairGeo, hairMat);
+      hairMesh.position.set(0, 0.22, -0.01);
+      this.head.add(hairMesh);
 
-    const hairFringeGeo = new THREE.BoxGeometry(0.19, 0.05, 0.06);
-    const hairFringe = new THREE.Mesh(hairFringeGeo, hairMat);
-    hairFringe.position.set(0, 0.2, 0.1);
-    hairFringe.rotation.x = 0.2;
-    this.head.add(hairFringe);
+      if (style !== 'buzz') {
+        const hairFringeGeo = new THREE.BoxGeometry(0.19, 0.05, 0.06);
+        const hairFringe = new THREE.Mesh(hairFringeGeo, hairMat);
+        hairFringe.position.set(0, 0.2, 0.1);
+        hairFringe.rotation.x = 0.2;
+        this.head.add(hairFringe);
+      }
+    } else if (style === 'wavy') {
+      const hairGeo = new THREE.BoxGeometry(0.22, 0.22, 0.24);
+      const hairMesh = new THREE.Mesh(hairGeo, hairMat);
+      hairMesh.position.set(0, 0.17, -0.02);
+      this.head.add(hairMesh);
+    } else if (style === 'ponytail') {
+      // Main crown volume
+      const crownGeo = new THREE.BoxGeometry(0.21, 0.14, 0.23);
+      const crownMesh = new THREE.Mesh(crownGeo, hairMat);
+      crownMesh.position.set(0, 0.21, -0.02);
+      this.head.add(crownMesh);
+
+      // High ponytail bunch
+      const ponytailGeo = new THREE.CylinderGeometry(0.04, 0.025, 0.35, 8);
+      const ponytailMesh = new THREE.Mesh(ponytailGeo, hairMat);
+      ponytailMesh.position.set(0, 0.14, -0.16);
+      ponytailMesh.rotation.x = -0.3;
+      ponytailMesh.castShadow = true;
+      this.head.add(ponytailMesh);
+    } else if (style === 'braid') {
+      // Crown volume
+      const crownGeo = new THREE.BoxGeometry(0.21, 0.15, 0.23);
+      const crownMesh = new THREE.Mesh(crownGeo, hairMat);
+      crownMesh.position.set(0, 0.21, -0.02);
+      this.head.add(crownMesh);
+
+      // Long traditional braid down the back
+      const braidGeo = new THREE.CylinderGeometry(0.045, 0.025, 0.48, 8);
+      const braidMesh = new THREE.Mesh(braidGeo, hairMat);
+      braidMesh.position.set(0, 0.04, -0.14);
+      braidMesh.rotation.x = -0.12;
+      braidMesh.castShadow = true;
+      this.head.add(braidMesh);
+    } else if (style === 'bob') {
+      // Curved bob cut
+      const bobGeo = new THREE.BoxGeometry(0.23, 0.26, 0.24);
+      const bobMesh = new THREE.Mesh(bobGeo, hairMat);
+      bobMesh.position.set(0, 0.16, -0.01);
+      this.head.add(bobMesh);
+    }
+
+    // Glasses / Spectacles
+    if (appearance.hasGlasses) {
+      const glassesMat = new THREE.MeshStandardMaterial({
+        color: 0x1e293b,
+        metalness: 0.8,
+        roughness: 0.2,
+      });
+      const frameGeo = new THREE.BoxGeometry(0.18, 0.04, 0.02);
+      const frame = new THREE.Mesh(frameGeo, glassesMat);
+      frame.position.set(0, 0.14, 0.115);
+      this.head.add(frame);
+    }
 
     // Bengali Gamcha (traditional neck wrap / scarf) if requested
     if (appearance.hasGamcha) {
@@ -397,15 +609,19 @@ export class CharacterRig {
       this.neck.add(gamcha);
     }
 
-    // --- ARMS (Left & Right) ---
+    // --- ARMS (Left & Right) with gendered shoulder width ---
+    const shoulderOffset = isFemale ? 0.17 : 0.20;
+    const armRadius = isFemale ? 0.046 : 0.055;
+    const forearmRadius = isFemale ? 0.040 : 0.048;
+
     // Left Shoulder
     this.leftShoulder = new THREE.Group();
-    this.leftShoulder.position.set(0.2, 0.22, 0);
+    this.leftShoulder.position.set(shoulderOffset, 0.22, 0);
     this.spineUpper.add(this.leftShoulder);
 
     this.leftUpperArm = new THREE.Group();
     this.leftShoulder.add(this.leftUpperArm);
-    const upperArmGeo = new THREE.CylinderGeometry(0.055, 0.05, 0.27, 10);
+    const upperArmGeo = new THREE.CylinderGeometry(armRadius, armRadius - 0.005, 0.27, 10);
     const upperArmMesh = new THREE.Mesh(upperArmGeo, chestMat);
     upperArmMesh.position.y = -0.135;
     upperArmMesh.castShadow = true;
@@ -415,7 +631,7 @@ export class CharacterRig {
     this.leftForearm = new THREE.Group();
     this.leftForearm.position.y = -0.27;
     this.leftUpperArm.add(this.leftForearm);
-    const forearmGeo = new THREE.CylinderGeometry(0.048, 0.042, 0.26, 10);
+    const forearmGeo = new THREE.CylinderGeometry(forearmRadius, forearmRadius - 0.006, 0.26, 10);
     const forearmMesh = new THREE.Mesh(forearmGeo, skinMat);
     forearmMesh.position.y = -0.13;
     forearmMesh.castShadow = true;
@@ -432,7 +648,7 @@ export class CharacterRig {
 
     // Right Shoulder
     this.rightShoulder = new THREE.Group();
-    this.rightShoulder.position.set(-0.2, 0.22, 0);
+    this.rightShoulder.position.set(-shoulderOffset, 0.22, 0);
     this.spineUpper.add(this.rightShoulder);
 
     this.rightUpperArm = new THREE.Group();

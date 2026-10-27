@@ -17,6 +17,25 @@
     <meta property="og:description" content="A high-fidelity third-person 3D open-world game set in a vibrant world inspired by Bangladesh, featuring detailed rigged human characters, interactive vehicles, quests, dynamic weather, and continuous seamless exploration." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      // Gracefully prevent benign Vite HMR WebSocket closing events from bubbling in iframe preview
+      window.addEventListener('error', function (event) {
+        if (event && (
+          (typeof event.message === 'string' && (event.message.includes('WebSocket') || event.message.includes('[vite]'))) ||
+          (event.error && typeof event.error.message === 'string' && (event.error.message.includes('WebSocket') || event.error.message.includes('[vite]')))
+        )) {
+          event.stopImmediatePropagation();
+          event.preventDefault();
+          return true;
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function (event) {
+        if (event && event.reason && typeof event.reason.message === 'string' && (event.reason.message.includes('WebSocket') || event.reason.message.includes('[vite]'))) {
+          event.stopImmediatePropagation();
+          event.preventDefault();
+        }
+      }, true);
+    </script>
   </head>
   <body>
     <div id="root"></div>
