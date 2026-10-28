@@ -38,9 +38,10 @@ export class CameraController {
     isDriving = false,
     vehicleYaw?: number,
     getTerrainHeight?: (x: number, z: number) => number,
+    targetYOffset = 1.55,
   ) {
     // Smoothly follow player / vehicle center
-    const targetOffset = isDriving ? new THREE.Vector3(0, 1.2, 0) : new THREE.Vector3(0, 1.55, 0);
+    const targetOffset = isDriving ? new THREE.Vector3(0, 1.2, 0) : new THREE.Vector3(0, targetYOffset, 0);
     const desiredCenter = followTarget.clone().add(targetOffset);
     this.targetPos.lerp(desiredCenter, 1 - Math.exp(-12 * delta));
 

@@ -82,7 +82,7 @@ export interface NPCConfig {
     hasHat?: boolean;
     hasGlasses?: boolean;
   };
-  dialogueId: string;
+  dialogueId?: string;
   idleType: 'stand' | 'lean' | 'wave' | 'sit';
   questAvailableId?: string;
 }

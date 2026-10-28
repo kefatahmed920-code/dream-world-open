@@ -11,9 +11,6 @@ import {
   Settings as SettingsIcon,
   Volume2,
   VolumeX,
-  Eye,
-  ChevronDown,
-  ChevronUp,
   Gauge,
   Navigation,
   Users,
@@ -21,6 +18,8 @@ import {
   User,
   Scissors,
   Trophy,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { PlayerStats, Quest } from '../types';
 import { ActiveVehicle } from '../vehicles/vehicleManager';
@@ -35,6 +34,7 @@ interface HUDProps {
   playerPos: { x: number; y: number; z: number };
   playerYaw: number;
   fps: number;
+  customWaypoint?: { x: number; z: number } | null;
   onOpenMap: () => void;
   onOpenInventory: () => void;
   onOpenSettings: () => void;
@@ -55,6 +55,7 @@ export const HUD: React.FC<HUDProps> = ({
   playerPos,
   playerYaw,
   fps,
+  customWaypoint,
   onOpenMap,
   onOpenInventory,
   onOpenSettings,
@@ -64,21 +65,21 @@ export const HUD: React.FC<HUDProps> = ({
   onOpenCharacterSelect,
   onOpenLeaderboard,
 }) => {
-  const [isDockCollapsed, setIsDockCollapsed] = useState(false);
+  const [isDockCollapsed, setIsDockCollapsed] = useState(true);
   const [isMuted, setIsMuted] = useState(soundManager.getIsMuted());
 
   // Determine Current Region Name based on player coordinates
-  let currentRegion = 'Dhanmondi City Avenue';
-  let currentRegionBn = 'ধানমন্ডি সিটি এভিনিউ';
+  let currentRegion = 'Dhanmondi Avenue';
+  let currentRegionBn = 'ধানমন্ডি এভিনিউ';
   if (playerPos.x >= 50 && playerPos.x <= 125 && Math.abs(playerPos.z - 3) < 14) {
-    currentRegion = 'Grand Padma Bridge';
-    currentRegionBn = 'পদ্মা সেতু এক্সপ্রেসওয়ে';
+    currentRegion = 'Padma Bridge';
+    currentRegionBn = 'পদ্মা সেতু';
   } else if (playerPos.x > 180 && playerPos.z < 25) {
-    currentRegion = 'Sylhet Mountain & Waterfall';
-    currentRegionBn = 'সিলেট পাহাড় ও ঝর্ণা ধারা';
+    currentRegion = 'Sylhet Waterfall';
+    currentRegionBn = 'সিলেট ঝর্ণা';
   } else if (playerPos.x >= 115 && playerPos.z >= 25) {
-    currentRegion = 'Shonar Village & Green Fields';
-    currentRegionBn = 'সোনার গ্রাম ও সবুজ প্রান্তর';
+    currentRegion = 'Shonar Village';
+    currentRegionBn = 'সোনার গ্রাম';
   }
 
   // Format Time (e.g. 10:30 AM)
@@ -88,22 +89,41 @@ export const HUD: React.FC<HUDProps> = ({
   const displayHours = hours % 12 === 0 ? 12 : hours % 12;
   const timeStr = `${displayHours}:${minutes < 10 ? '0' : ''}${minutes} ${ampm}`;
 
-  // Mini-map calculations
-  const miniMapSize = 120;
-  const miniMapScale = 0.55; // pixels per world meter
+  // Circular Mini-map calculations (Free Fire / PUBG radar scale)
+  const miniMapRadius = 52; // pixels
+  const radarScale = 0.58; // pixels per world meter
 
-  // Quest Marker in Mini-Map
+  // Quest objective distance & relative radar position
   const currentObjective = activeQuest?.objectives[activeQuest.currentObjectiveIndex];
-  let questRelX = 0;
-  let questRelZ = 0;
-  let questDistMeters = 0;
-  if (currentObjective) {
+  let targetRelX = 0;
+  let targetRelZ = 0;
+  let targetDistM = 0;
+  let targetType: 'quest' | 'waypoint' | null = null;
+
+  if (customWaypoint) {
+    const dx = customWaypoint.x - playerPos.x;
+    const dz = customWaypoint.z - playerPos.z;
+    targetDistM = Math.round(Math.sqrt(dx * dx + dz * dz));
+    targetRelX = dx * radarScale;
+    targetRelZ = dz * radarScale;
+    targetType = 'waypoint';
+  } else if (currentObjective) {
     const dx = currentObjective.targetPos.x - playerPos.x;
     const dz = currentObjective.targetPos.z - playerPos.z;
-    questDistMeters = Math.round(Math.sqrt(dx * dx + dz * dz));
-    questRelX = dx * miniMapScale;
-    questRelZ = dz * miniMapScale;
+    targetDistM = Math.round(Math.sqrt(dx * dx + dz * dz));
+    targetRelX = dx * radarScale;
+    targetRelZ = dz * radarScale;
+    targetType = 'quest';
   }
+
+  // Clamp target marker within circular radar bounds
+  const targetDistPix = Math.sqrt(targetRelX * targetRelX + targetRelZ * targetRelZ);
+  const clampedRadius = Math.min(targetDistPix, miniMapRadius - 8);
+  const markerX = targetDistPix > 0 ? (targetRelX / targetDistPix) * clampedRadius : 0;
+  const markerZ = targetDistPix > 0 ? (targetRelZ / targetDistPix) * clampedRadius : 0;
+
+  // Relative river position on radar (River center at X = 87.5, width 50)
+  const riverRelX = (87.5 - playerPos.x) * radarScale;
 
   const toggleMute = () => {
     const next = !isMuted;
@@ -112,76 +132,98 @@ export const HUD: React.FC<HUDProps> = ({
   };
 
   return (
-    <div className="absolute inset-0 pointer-events-none select-none z-10 flex flex-col justify-between overflow-hidden">
-      {/* --- TOP BAR: REGION INFO & GPS MINI-MAP --- */}
-      <div className="flex justify-between items-start p-4 md:p-6 w-full">
-        {/* Top Left: Title, Location & Player Status */}
-        <div className="flex flex-col gap-2 pointer-events-auto">
-          {/* World Badge */}
-          <div className="bg-slate-900/90 text-white px-3.5 py-2 rounded-xl border border-slate-700/60 shadow-lg flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+    <div className="absolute inset-0 pointer-events-none select-none z-10 flex flex-col justify-between overflow-hidden p-2 sm:p-4">
+      {/* ========================================================
+          TOP HEADER: REGION INFO, HEALTH BAR, CIRCULAR RADAR MINIMAP
+          ======================================================== */}
+      <div className="flex items-start justify-between w-full gap-2">
+        {/* --- TOP LEFT: REGION & CLOCK (Clean, Uncluttered) --- */}
+        <div className="flex flex-col gap-1 pointer-events-auto">
+          <div className="bg-slate-950/75 backdrop-blur-xs text-white px-3 py-1.5 rounded-xl border border-slate-700/60 shadow-lg flex items-center gap-2.5">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <div>
-              <div className="text-xs font-semibold tracking-wider text-emerald-400 uppercase">
+              <div className="text-[11px] font-bold tracking-wider text-emerald-400 uppercase">
                 {currentRegion}
               </div>
-              <div className="text-[11px] text-slate-300 font-medium">
+              <div className="text-[10px] text-slate-300 font-medium">
                 {currentRegionBn} · <span className="tabular-nums text-amber-300 font-semibold">{timeStr}</span>
               </div>
             </div>
-            <div className="ml-2 pl-2 border-l border-slate-700 text-[10px] text-slate-400 tabular-nums">
+            <div className="ml-1.5 pl-2 border-l border-slate-800 text-[9px] text-slate-400 tabular-nums">
               {fps} FPS
             </div>
           </div>
 
-          {/* Vitals Cluster: Health, Stamina, Taka */}
-          <div className="bg-slate-900/85 px-3.5 py-2.5 rounded-xl border border-slate-700/50 shadow-md flex flex-col gap-1.5 w-60">
-            {/* Health Bar */}
-            <div className="flex items-center justify-between text-[11px] text-slate-300">
-              <span className="font-semibold text-rose-400">HEALTH</span>
-              <span className="tabular-nums font-mono text-slate-200">{stats.health}/{stats.maxHealth}</span>
+          {/* Quick Active Quest Pill */}
+          {activeQuest && currentObjective && (
+            <div
+              onClick={onOpenMap}
+              className="bg-slate-950/80 backdrop-blur-xs text-white px-2.5 py-1 rounded-lg border border-amber-500/40 shadow flex items-center gap-2 max-w-[200px] sm:max-w-[240px] cursor-pointer hover:border-amber-400 transition-colors"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+              <div className="text-[10px] font-medium text-slate-200 truncate flex-1">
+                {currentObjective.text}
+              </div>
+              <div className="text-[9px] font-mono font-bold text-amber-400 tabular-nums shrink-0">
+                {targetDistM}m
+              </div>
             </div>
-            <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+          )}
+        </div>
+
+        {/* --- TOP MIDDLE: COMPACT PUBG/FREE FIRE HEALTH & STAMINA BAR --- */}
+        <div className="pointer-events-auto flex flex-col items-center">
+          <div className="bg-slate-950/80 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-slate-700/60 shadow-2xl flex flex-col gap-1 w-48 sm:w-56">
+            {/* Health Bar (Red/White gradient with real health numbers) */}
+            <div className="flex items-center justify-between text-[10px] leading-none">
+              <span className="font-extrabold text-rose-400 tracking-wider">HP</span>
+              <span className="tabular-nums font-mono text-[10px] font-bold text-slate-200">
+                {Math.round(stats.health)}/{stats.maxHealth}
+              </span>
+            </div>
+            <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-700/40 p-0.5">
               <div
-                className="bg-rose-500 h-full rounded-full transition-all duration-300"
-                style={{ width: `${(stats.health / stats.maxHealth) * 100}%` }}
+                className="bg-gradient-to-r from-rose-600 via-rose-500 to-amber-400 h-full rounded-full transition-all duration-200 shadow-xs"
+                style={{ width: `${Math.max(0, Math.min(100, (stats.health / stats.maxHealth) * 100))}%` }}
               />
             </div>
 
-            {/* Stamina Bar */}
-            <div className="flex items-center justify-between text-[11px] text-slate-300">
-              <span className="font-semibold text-emerald-400">STAMINA</span>
-              <span className="tabular-nums font-mono text-slate-200">{Math.round(stats.stamina)}%</span>
-            </div>
-            <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+            {/* Stamina Bar (Emerald energy bar) */}
+            <div className="w-full bg-slate-900 h-1 rounded-full overflow-hidden border border-slate-800">
               <div
-                className="bg-emerald-500 h-full rounded-full transition-all duration-300"
-                style={{ width: `${stats.stamina}%` }}
+                className="bg-emerald-400 h-full rounded-full transition-all duration-150"
+                style={{ width: `${Math.max(0, Math.min(100, stats.stamina))}%` }}
               />
             </div>
 
-            {/* Currency & Level */}
-            <div className="pt-1 mt-1 border-t border-slate-800/80 flex justify-between items-center text-xs">
-              <span className="text-amber-400 font-bold tabular-nums flex items-center gap-1">
-                <span className="text-amber-500 text-sm">৳</span> {stats.money.toLocaleString()}
-              </span>
-              <span className="text-sky-300 text-[11px] font-semibold bg-sky-950/80 px-2 py-0.5 rounded border border-sky-800/40">
-                LVL {stats.level}
-              </span>
+            {/* Micro Currency & Level */}
+            <div className="flex items-center justify-between text-[9px] font-semibold text-slate-300 pt-0.5">
+              <span className="text-amber-400 tabular-nums font-bold">৳ {stats.money}</span>
+              <span className="text-sky-300">LVL {stats.level}</span>
             </div>
           </div>
         </div>
 
-        {/* Top Right: GPS Mini-Map & Active Quest Pin */}
-        <div className="flex flex-col items-end gap-2.5 pointer-events-auto">
-          {/* Circular GPS Radar */}
+        {/* --- TOP RIGHT: CIRCULAR RADAR MINIMAP & SETTINGS BUTTON --- */}
+        <div className="flex items-start gap-2 pointer-events-auto">
+          {/* Pause / Settings Button (Separate from minimap, easily tapped) */}
+          <button
+            onClick={onOpenSettings}
+            title="Open Settings & Audio (Esc)"
+            className="w-10 h-10 rounded-2xl bg-slate-950/80 hover:bg-slate-900 border border-slate-700/70 shadow-xl flex items-center justify-center text-slate-300 hover:text-white active:scale-95 transition-all"
+          >
+            <SettingsIcon className="w-5 h-5" />
+          </button>
+
+          {/* Circular GPS Radar Minimap */}
           <div
             onClick={onOpenMap}
-            title="Click to open Full World Map (M)"
-            className="w-28 h-28 md:w-32 md:h-32 rounded-2xl bg-slate-900/90 border-2 border-slate-700/80 shadow-2xl relative overflow-hidden cursor-pointer hover:border-emerald-500/80 transition-colors"
+            title="Tap to open Full Map (M)"
+            className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-slate-950/90 border-2 border-slate-600/80 shadow-2xl relative overflow-hidden cursor-pointer hover:border-emerald-400 transition-colors flex items-center justify-center backdrop-blur-xs"
           >
-            {/* Grid concentric rings */}
-            <div className="absolute inset-2 rounded-xl border border-slate-700/40" />
-            <div className="absolute inset-7 rounded-lg border border-slate-700/30" />
+            {/* Concentric radar range rings */}
+            <div className="absolute inset-2 rounded-full border border-slate-700/40" />
+            <div className="absolute inset-6 rounded-full border border-slate-700/30" />
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-full h-px bg-slate-700/30" />
             </div>
@@ -189,218 +231,159 @@ export const HUD: React.FC<HUDProps> = ({
               <div className="h-full w-px bg-slate-700/30" />
             </div>
 
-            {/* Compass North Needle */}
-            <div className="absolute top-1.5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-rose-400 flex items-center gap-0.5">
-              <Compass className="w-2.5 h-2.5 text-rose-400" /> N
-            </div>
-
-            {/* Quest Waypoint on Mini-map */}
-            {currentObjective && (
+            {/* River Padma ribbon on radar */}
+            {Math.abs(riverRelX) < miniMapRadius + 20 && (
               <div
-                className="absolute w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
+                className="absolute top-0 bottom-0 w-7 bg-sky-500/25 border-x border-sky-400/40 pointer-events-none"
                 style={{
-                  left: `${Math.max(12, Math.min(miniMapSize - 12, miniMapSize / 2 + questRelX))}px`,
-                  top: `${Math.max(12, Math.min(miniMapSize - 12, miniMapSize / 2 + questRelZ))}px`,
+                  left: `calc(50% + ${riverRelX}px - 14px)`,
                 }}
-              >
-                <div className="w-3 h-3 bg-amber-400 border border-slate-900 rounded-full shadow-sm animate-bounce" />
-              </div>
+              />
             )}
+
+            {/* Compass North Needle */}
+            <div className="absolute top-1 left-1/2 -translate-x-1/2 text-[8px] font-black text-rose-400 flex items-center gap-0.5 tracking-tighter">
+              N
+            </div>
 
             {/* Center Player Direction Arrow */}
             <div
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center"
-              style={{ transform: `translate(-50%, -50%) rotate(${(-playerYaw * 180) / Math.PI}deg)` }}
+              className="absolute z-20 w-4 h-4 flex items-center justify-center"
+              style={{ transform: `rotate(${(-playerYaw * 180) / Math.PI}deg)` }}
             >
               <Navigation className="w-4 h-4 text-emerald-400 fill-emerald-400 filter drop-shadow" />
             </div>
 
-            {/* Mini map tap label */}
-            <div className="absolute bottom-1 right-2 text-[8px] font-bold text-slate-400">
-              TAP MAP
+            {/* Objective / Waypoint Marker */}
+            {targetType && (
+              <div
+                className="absolute z-30 w-3 h-3 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
+                style={{
+                  left: `calc(50% + ${markerX}px)`,
+                  top: `calc(50% + ${markerZ}px)`,
+                }}
+              >
+                <div
+                  className={`w-2.5 h-2.5 rounded-full border border-slate-950 shadow-md ${
+                    targetType === 'waypoint'
+                      ? 'bg-sky-400 animate-ping'
+                      : 'bg-amber-400 animate-bounce'
+                  }`}
+                />
+              </div>
+            )}
+
+            {/* Tap indicator label */}
+            <div className="absolute bottom-1 text-[7px] font-extrabold text-slate-400 tracking-wider">
+              MAP
             </div>
           </div>
-
-          {/* Active Quest Objective Box */}
-          {activeQuest && currentObjective && (
-            <div
-              onClick={onOpenMap}
-              className="bg-slate-900/90 text-white p-3 rounded-xl border border-amber-500/40 shadow-lg max-w-[240px] md:max-w-[280px] cursor-pointer hover:border-amber-400 transition-colors"
-            >
-              <div className="flex items-center justify-between gap-1 mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> ACTIVE QUEST
-                </span>
-                <span className="text-[10px] font-mono text-amber-300 font-semibold tabular-nums">
-                  {questDistMeters}m
-                </span>
-              </div>
-              <div className="text-xs font-semibold text-slate-100 line-clamp-1">{activeQuest.title}</div>
-              <div className="text-[11px] text-slate-300 mt-0.5 line-clamp-2">
-                ▸ {currentObjective.text}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* --- CENTER SCREEN: CONTEXT INTERACTION PROMPT --- */}
-      <div className="flex flex-col items-center justify-center pointer-events-none mb-12">
+      {/* ========================================================
+          CENTER SCREEN: SPEEDOMETER & PROXIMITY INTERACTION CUE
+          ======================================================== */}
+      <div className="flex flex-col items-center justify-center pointer-events-none mb-14">
+        {/* Proximity Interaction Banner (when looking at NPC/car) */}
         {interactionPrompt && (
-          <div className="bg-slate-950/90 text-white px-5 py-2.5 rounded-2xl border-2 border-emerald-400 shadow-2xl flex items-center gap-2.5 text-sm font-bold tracking-wide animate-pulse">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+          <div className="bg-slate-950/90 text-white px-4 py-2 rounded-2xl border-2 border-emerald-400 shadow-2xl flex items-center gap-2 text-xs font-bold tracking-wide animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
             {interactionPrompt}
           </div>
         )}
 
         {/* Speedometer when Driving Vehicle */}
         {activeVehicle && (
-          <div className="bg-slate-950/90 border border-slate-700/80 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-4 mt-3 pointer-events-auto">
-            <div className="p-2 rounded-xl bg-emerald-950/60 border border-emerald-600/40 text-emerald-400">
-              <Gauge className="w-6 h-6" />
+          <div className="bg-slate-950/90 border border-slate-700/80 text-white px-5 py-2.5 rounded-2xl shadow-2xl flex items-center gap-3.5 mt-2 pointer-events-auto">
+            <div className="p-1.5 rounded-xl bg-emerald-950/70 border border-emerald-600/40 text-emerald-400">
+              <Gauge className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-xs text-slate-400 uppercase font-semibold">
+              <div className="text-[10px] text-slate-400 uppercase font-semibold">
                 {activeVehicle.config.nameBn}
               </div>
-              <div className="text-2xl font-black font-mono text-emerald-400 tabular-nums">
+              <div className="text-xl font-black font-mono text-emerald-400 tabular-nums">
                 {Math.round(Math.abs(activeVehicle.velocity) * 3.6)}{' '}
-                <span className="text-xs font-normal text-slate-400">km/h</span>
+                <span className="text-[10px] font-normal text-slate-400">km/h</span>
               </div>
-            </div>
-            <div className="pl-4 border-l border-slate-800 text-[11px] text-slate-400 font-medium">
-              [W] Gas · [S] Reverse<br />[Space] Handbrake · [F] Exit
             </div>
           </div>
         )}
       </div>
 
-      {/* --- BOTTOM CENTER: UNIFIED COLLAPSIBLE CONTROL DOCK --- */}
-      {/* Per Three.js guidelines: zero viewport occlusion, consolidated bottom center dock */}
-      <div className="flex flex-col items-center pointer-events-auto mb-4 px-4 w-full">
-        {/* Collapse / Expand Toggle Tab */}
+      {/* ========================================================
+          BOTTOM CENTER: MINIMAL DISCREET MENU DOCK
+          ======================================================== */}
+      <div className="flex flex-col items-center pointer-events-auto mb-2 px-2 w-full">
+        {/* Expand / Collapse Toggle Bar */}
         <button
-          onClick={() => setIsDockCollapsed(!isDockCollapsed)}
-          className="bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white px-4 py-1 rounded-t-xl border-t border-x border-slate-700/70 text-xs font-semibold flex items-center gap-1.5 shadow-md transition-colors"
-          title="Toggle HUD view (H)"
+          onClick={() => setIsDockCollapsed((prev) => !prev)}
+          className="bg-slate-950/80 hover:bg-slate-900 border border-slate-700/60 text-slate-400 hover:text-slate-200 px-3 py-1 rounded-full text-[10px] font-semibold flex items-center gap-1 shadow-md transition-all active:scale-95"
         >
           {isDockCollapsed ? (
             <>
-              <ChevronUp className="w-3.5 h-3.5" /> Show Controls
+              <ChevronUp className="w-3.5 h-3.5" /> Menu
             </>
           ) : (
             <>
-              <ChevronDown className="w-3.5 h-3.5" /> Zen / Cinema Mode
+              <ChevronDown className="w-3.5 h-3.5" /> Hide Menu
             </>
           )}
         </button>
 
-        {/* Main Dock Container */}
+        {/* Collapsible Utility Items */}
         {!isDockCollapsed && (
-          <div className="bg-slate-950/90 border border-slate-700/70 rounded-2xl p-2 md:p-2.5 shadow-2xl flex items-center gap-2 max-w-full overflow-x-auto">
-            {/* World Map Button */}
-            <button
-              onClick={onOpenMap}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600/40 transition-colors"
-              title="Open Interactive Map (M)"
-            >
-              <MapIcon className="w-4 h-4 text-emerald-400" />
-              <span>Map (M)</span>
-            </button>
-
-            {/* Inventory Bag Button */}
+          <div className="mt-2 bg-slate-950/90 border border-slate-700/80 rounded-2xl p-2 shadow-2xl flex items-center gap-1.5 flex-wrap justify-center animate-fade-in backdrop-blur-xs">
             <button
               onClick={onOpenInventory}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600/40 transition-colors"
-              title="Open Inventory (I)"
+              className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700"
             >
-              <Package className="w-4 h-4 text-sky-400" />
-              <span>Bag</span>
+              <Package className="w-3.5 h-3.5 text-amber-400" /> Backpack (I)
             </button>
-
-            {/* Profile Button */}
-            {onOpenProfile && (
-              <button
-                onClick={onOpenProfile}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600/40 transition-colors"
-                title="Player Profile & Permanent UID"
-              >
-                <User className="w-4 h-4 text-cyan-400" />
-                <span>ID</span>
-              </button>
-            )}
-
-            {/* Character Customizer Button */}
-            {onOpenCharacterSelect && (
-              <button
-                onClick={onOpenCharacterSelect}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600/40 transition-colors"
-                title="Customize Character & Outfit"
-              >
-                <Scissors className="w-4 h-4 text-pink-400" />
-                <span>Avatar</span>
-              </button>
-            )}
-
-            {/* Leaderboard Button */}
+            <button
+              onClick={onOpenMultiplayer}
+              className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700"
+            >
+              <Users className="w-3.5 h-3.5 text-emerald-400" /> Co-Op Room
+            </button>
             {onOpenLeaderboard && (
               <button
                 onClick={onOpenLeaderboard}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600/40 transition-colors"
-                title="Global Leaderboard"
+                className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700"
               >
-                <Trophy className="w-4 h-4 text-amber-400" />
-                <span>Ranks</span>
+                <Trophy className="w-3.5 h-3.5 text-amber-400" /> Leaderboard
               </button>
             )}
-
-            {/* Multiplayer Button */}
-            <button
-              onClick={onOpenMultiplayer}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600/40 transition-colors"
-              title="Online Multiplayer (মাল্টিপ্লেয়ার)"
-            >
-              <Users className="w-4 h-4 text-emerald-400" />
-              <span>Co-op</span>
-            </button>
-
-            {/* Install Game Button */}
-            <button
-              onClick={onOpenInstallModal}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600/40 transition-colors"
-              title="Install Game (ইনস্টল)"
-            >
-              <Download className="w-4 h-4 text-amber-400" />
-              <span>Install</span>
-            </button>
-
-            {/* Settings Button */}
-            <button
-              onClick={onOpenSettings}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600/40 transition-colors"
-              title="Settings (Esc)"
-            >
-              <SettingsIcon className="w-4 h-4 text-amber-400" />
-              <span>Settings</span>
-            </button>
-
-            {/* Audio Mute Toggle */}
+            {onOpenCharacterSelect && (
+              <button
+                onClick={onOpenCharacterSelect}
+                className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700"
+              >
+                <Scissors className="w-3.5 h-3.5 text-sky-400" /> Character
+              </button>
+            )}
+            {onOpenProfile && (
+              <button
+                onClick={onOpenProfile}
+                className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700"
+              >
+                <User className="w-3.5 h-3.5 text-indigo-400" /> Profile
+              </button>
+            )}
             <button
               onClick={toggleMute}
-              className={`p-2 rounded-xl border transition-colors ${
-                isMuted
-                  ? 'bg-rose-950/80 border-rose-800/60 text-rose-300'
-                  : 'bg-slate-800/80 border-slate-600/40 text-slate-200 hover:bg-slate-700'
-              }`}
+              className="p-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700"
               title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
             >
-              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
             </button>
-
-            {/* Controls hint text */}
-            <div className="hidden lg:flex items-center text-[11px] text-slate-400 px-3 pl-4 border-l border-slate-800 font-medium">
-              WASD Move · Shift Sprint · Space Jump · E Interact · F Drive
-            </div>
+            <button
+              onClick={onOpenInstallModal}
+              className="px-2.5 py-1.5 rounded-xl bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-400 text-xs font-semibold flex items-center gap-1 border border-emerald-600/40"
+            >
+              <Download className="w-3.5 h-3.5" /> Install
+            </button>
           </div>
         )}
       </div>

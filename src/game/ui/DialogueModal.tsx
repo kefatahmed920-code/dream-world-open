@@ -21,8 +21,9 @@ export const DialogueModal: React.FC<DialogueModalProps> = ({
   questManager,
   onClose,
 }) => {
-  const [currentNodeId, setCurrentNodeId] = useState(npc.config.dialogueId);
-  const node = DIALOGUE_DATABASE[currentNodeId] || DIALOGUE_DATABASE[npc.config.dialogueId];
+  const defaultDialogueId = npc.config.dialogueId || 'dialogue_ped_generic';
+  const [currentNodeId, setCurrentNodeId] = useState<string>(defaultDialogueId);
+  const node = DIALOGUE_DATABASE[currentNodeId] || DIALOGUE_DATABASE[defaultDialogueId];
 
   if (!node) return null;
 
@@ -85,7 +86,7 @@ export const DialogueModal: React.FC<DialogueModalProps> = ({
 
         {/* Interactive Response Options */}
         <div className="flex flex-col gap-2 pt-2 border-t border-slate-800/80">
-          {node.options.map((opt, idx) => (
+          {node.options.map((opt: typeof node.options[0], idx: number) => (
             <button
               key={idx}
               onClick={() => handleOptionClick(opt)}

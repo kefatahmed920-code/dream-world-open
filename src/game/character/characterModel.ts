@@ -759,6 +759,7 @@ export class CharacterRig {
     speed: number, // 0 to 1 (0 = idle, 0.4 = walk, 0.8 = run, 1.0 = sprint)
     isAirborne: boolean,
     isSeated = false,
+    stance: 'stand' | 'crouch' | 'prone' | 'swim' = 'stand',
   ) {
     this.isAirborne = isAirborne;
     this.isSeatedInVehicle = isSeated;
@@ -769,6 +770,7 @@ export class CharacterRig {
     // Vehicle Seated Pose
     if (this.isSeatedInVehicle) {
       this.pelvis.position.y = THREE.MathUtils.damp(this.pelvis.position.y, 0.55, 8, delta);
+      this.pelvis.rotation.x = THREE.MathUtils.damp(this.pelvis.rotation.x, 0, 8, delta);
       this.spineLower.rotation.x = THREE.MathUtils.damp(this.spineLower.rotation.x, 0.1, 8, delta);
       this.spineUpper.rotation.x = THREE.MathUtils.damp(this.spineUpper.rotation.x, 0.15, 8, delta);
 
@@ -792,7 +794,132 @@ export class CharacterRig {
       return;
     }
 
+    // 1. SWIMMING STANCE
+    if (stance === 'swim') {
+      this.contactShadow.visible = false;
+      // Body angled horizontally floating in river
+      this.pelvis.position.y = THREE.MathUtils.damp(this.pelvis.position.y, 0.45, 8, delta);
+      this.pelvis.rotation.x = THREE.MathUtils.damp(this.pelvis.rotation.x, -1.25, 8, delta);
+      this.head.rotation.x = THREE.MathUtils.damp(this.head.rotation.x, 0.85, 8, delta);
+      this.spineLower.rotation.x = THREE.MathUtils.damp(this.spineLower.rotation.x, 0.15, 8, delta);
+
+      this.animPhase += delta * (3.5 + this.currentMoveSpeed * 6.0);
+      const phase = this.animPhase;
+
+      if (this.currentMoveSpeed < 0.05) {
+        // Treading water idle
+        const tread = Math.sin(phase * 1.5);
+        this.pelvis.position.y = 0.45 + tread * 0.04;
+        this.leftUpperArm.rotation.set(-0.35 + tread * 0.2, 0, 0.55 + tread * 0.15);
+        this.rightUpperArm.rotation.set(-0.35 + tread * 0.2, 0, -0.55 - tread * 0.15);
+        this.leftForearm.rotation.set(-0.4, 0, 0);
+        this.rightForearm.rotation.set(-0.4, 0, 0);
+        this.leftThigh.rotation.set(0.3 + tread * 0.25, 0, 0.1);
+        this.rightThigh.rotation.set(0.3 - tread * 0.25, 0, -0.1);
+        this.leftCalf.rotation.set(0.4, 0, 0);
+        this.rightCalf.rotation.set(0.4, 0, 0);
+      } else {
+        // Active Swimming Crawl / Freestyle
+        // Alternating arm strokes
+        this.leftUpperArm.rotation.x = Math.sin(phase * 2.2) * 1.2 - 0.25;
+        this.rightUpperArm.rotation.x = Math.sin(phase * 2.2 + Math.PI) * 1.2 - 0.25;
+        this.leftUpperArm.rotation.z = 0.4 + Math.cos(phase * 2.2) * 0.35;
+        this.rightUpperArm.rotation.z = -0.4 - Math.cos(phase * 2.2 + Math.PI) * 0.35;
+        this.leftForearm.rotation.x = -0.5 + Math.sin(phase * 2.2) * 0.4;
+        this.rightForearm.rotation.x = -0.5 + Math.sin(phase * 2.2 + Math.PI) * 0.4;
+
+        // Rapid flutter kicks
+        const kickL = Math.sin(phase * 3.8);
+        this.leftThigh.rotation.x = kickL * 0.4;
+        this.rightThigh.rotation.x = -kickL * 0.4;
+        this.leftCalf.rotation.x = Math.max(0, -kickL) * 0.5;
+        this.rightCalf.rotation.x = Math.max(0, kickL) * 0.5;
+      }
+      return;
+    }
+
+    // 2. PRONE STANCE (Crawling along ground)
+    if (stance === 'prone') {
+      this.contactShadow.visible = true;
+      this.pelvis.position.y = THREE.MathUtils.damp(this.pelvis.position.y, 0.18, 10, delta);
+      this.pelvis.rotation.x = THREE.MathUtils.damp(this.pelvis.rotation.x, -1.48, 8, delta);
+      this.head.rotation.x = THREE.MathUtils.damp(this.head.rotation.x, 0.95, 8, delta);
+      this.spineLower.rotation.x = 0.05;
+      this.spineUpper.rotation.x = 0.05;
+
+      this.animPhase += delta * (2.5 + this.currentMoveSpeed * 5.0);
+      const phase = this.animPhase;
+
+      if (this.currentMoveSpeed < 0.05) {
+        // Idle prone: flat on elbows looking forward
+        this.leftUpperArm.rotation.set(-1.1, 0, 0.35);
+        this.rightUpperArm.rotation.set(-1.1, 0, -0.35);
+        this.leftForearm.rotation.set(-0.7, 0, 0);
+        this.rightForearm.rotation.set(-0.7, 0, 0);
+        this.leftThigh.rotation.set(0.1, 0, 0.15);
+        this.rightThigh.rotation.set(0.1, 0, -0.15);
+        this.leftCalf.rotation.set(0.15, 0, 0);
+        this.rightCalf.rotation.set(0.15, 0, 0);
+      } else {
+        // Commando army crawl
+        const crawlL = Math.sin(phase * 2.0);
+        this.leftUpperArm.rotation.x = crawlL * 0.7 - 0.8;
+        this.rightUpperArm.rotation.x = -crawlL * 0.7 - 0.8;
+        this.leftForearm.rotation.x = -0.6;
+        this.rightForearm.rotation.x = -0.6;
+        this.leftThigh.rotation.x = Math.max(0, -crawlL) * 0.6;
+        this.rightThigh.rotation.x = Math.max(0, crawlL) * 0.6;
+        this.leftCalf.rotation.x = Math.max(0, -crawlL) * 0.7;
+        this.rightCalf.rotation.x = Math.max(0, crawlL) * 0.7;
+      }
+      return;
+    }
+
+    // 3. CROUCH STANCE (Low Tactical Walk)
+    if (stance === 'crouch') {
+      this.contactShadow.visible = true;
+      this.pelvis.position.y = THREE.MathUtils.damp(this.pelvis.position.y, 0.60, 10, delta);
+      this.pelvis.rotation.x = THREE.MathUtils.damp(this.pelvis.rotation.x, 0, 8, delta);
+      this.head.rotation.x = THREE.MathUtils.damp(this.head.rotation.x, -0.15, 8, delta);
+      this.spineLower.rotation.x = 0.38;
+      this.spineUpper.rotation.x = 0.22;
+
+      this.animPhase += delta * (4.5 + this.currentMoveSpeed * 6.5);
+      const phase = this.animPhase;
+
+      if (this.currentMoveSpeed < 0.05) {
+        // Crouch idle
+        this.leftThigh.rotation.set(-0.75, 0, 0.05);
+        this.rightThigh.rotation.set(-0.75, 0, -0.05);
+        this.leftCalf.rotation.set(1.2, 0, 0);
+        this.rightCalf.rotation.set(1.2, 0, 0);
+        this.leftFoot.rotation.set(-0.35, 0, 0);
+        this.rightFoot.rotation.set(-0.35, 0, 0);
+        this.leftUpperArm.rotation.set(-0.4, 0, 0.15);
+        this.rightUpperArm.rotation.set(-0.4, 0, -0.15);
+        this.leftForearm.rotation.set(-0.6, 0, 0);
+        this.rightForearm.rotation.set(-0.6, 0, 0);
+      } else {
+        // Crouch walk gait
+        const swing = Math.sin(phase) * 0.65;
+        this.leftThigh.rotation.x = -0.7 + swing;
+        this.rightThigh.rotation.x = -0.7 - swing;
+        this.leftCalf.rotation.x = 1.1 + Math.max(0, -swing) * 0.4;
+        this.rightCalf.rotation.x = 1.1 + Math.max(0, swing) * 0.4;
+        this.leftFoot.rotation.x = -0.3;
+        this.rightFoot.rotation.x = -0.3;
+        this.leftUpperArm.rotation.x = -0.5 - swing * 0.4;
+        this.rightUpperArm.rotation.x = -0.5 + swing * 0.4;
+        this.leftForearm.rotation.x = -0.7;
+        this.rightForearm.rotation.x = -0.7;
+      }
+      return;
+    }
+
+    // 4. STAND STANCE
     this.contactShadow.visible = true;
+    this.pelvis.rotation.x = THREE.MathUtils.damp(this.pelvis.rotation.x, 0, 8, delta);
+    this.head.rotation.x = THREE.MathUtils.damp(this.head.rotation.x, 0, 8, delta);
 
     // Airborne / Jump Pose
     if (this.isAirborne) {

@@ -292,6 +292,19 @@ export const DIALOGUE_DATABASE: Record<string, DialogueNode> = {
       },
     ],
   },
+  dialogue_ped_generic: {
+    id: 'dialogue_ped_generic',
+    speaker: 'City Passerby',
+    speakerTitle: 'Dhanmondi Resident',
+    text: 'Subho Shokal! The city avenue is looking clean and spacious today. Enjoy your walk through Dhanmondi!',
+    textBn: 'শুভ সকাল! ধানমন্ডি এভিনিউতে আপনার দিনটি শুভ হোক!',
+    options: [
+      {
+        label: 'Thank you! Have a great day!',
+        action: 'close',
+      },
+    ],
+  },
 };
 
 export class QuestManager {

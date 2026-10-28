@@ -22,7 +22,6 @@ export class VehicleManager {
   public vehicles: ActiveVehicle[] = [];
   public group: THREE.Group;
   public activePlayerVehicle: ActiveVehicle | null = null;
-  public trafficVehicles: { mesh: THREE.Group; speed: number; minX: number; maxX: number; dir: number }[] = [];
 
   constructor(scene: THREE.Scene, getTerrainHeight: (x: number, z: number) => number) {
     this.group = new THREE.Group();
@@ -30,18 +29,17 @@ export class VehicleManager {
     scene.add(this.group);
 
     this.spawnDefaultVehicles(getTerrainHeight);
-    this.spawnAmbientTraffic(getTerrainHeight);
   }
 
   private spawnDefaultVehicles(getTerrainHeight: (x: number, z: number) => number) {
-    // 1. Classic Bangladeshi Green CNG Auto-Rickshaw (near Dhaka Cha Stall)
+    // 1. Classic Bangladeshi Green CNG Auto-Rickshaw (parked curbside near Dhaka Cha Stall)
     const cngConfig: VehicleConfig = {
       id: 'veh_cng_1',
       type: 'cng',
       name: 'Green CNG Auto-Rickshaw',
       nameBn: 'সবুজ সিএনজি অটোরিকশা',
-      position: [20, 0, 16],
-      rotationY: Math.PI * 0.5,
+      position: [18, 0, 14.8],
+      rotationY: Math.PI * 0.5, // Parallel to curb
       color: '#15803d', // Dhaka Green
       maxSpeed: 18, // 18 m/s (~65 km/h)
       acceleration: 8,
@@ -49,15 +47,15 @@ export class VehicleManager {
     };
     this.createCNGRickshaw(cngConfig, getTerrainHeight);
 
-    // 2. City Sedan Car (in the city avenue lane)
+    // 2. Player's Personal City Sedan Car (parked curbside in designated parking bay, ready to drive)
     const carConfig: VehicleConfig = {
       id: 'veh_car_1',
       type: 'car',
       name: 'City Sedan',
       nameBn: 'প্রাইভেট কার',
-      position: [-5, 0, 1],
-      rotationY: 0,
-      color: '#0284c7', // Sky Blue
+      position: [-4, 0, 8.5],
+      rotationY: Math.PI * 0.5, // Facing eastbound in driving direction
+      color: '#0284c7', // Metallic Sky Blue
       maxSpeed: 28, // 28 m/s (~100 km/h)
       acceleration: 14,
       handling: 1.8,
@@ -300,53 +298,13 @@ export class VehicleManager {
   }
 
   /**
-   * Ambient Traffic System
-   * Realistic cars cruising down the avenue and across the bridge
-   */
-  private spawnAmbientTraffic(getTerrainHeight: (x: number, z: number) => number) {
-    const colors = [0xd97706, 0x475569, 0xb91c1c];
-    colors.forEach((col, idx) => {
-      const car = new THREE.Group();
-      const bodyGeo = new THREE.BoxGeometry(1.9, 0.55, 4.0);
-      const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.4, metalness: 0.5 });
-      const mesh = new THREE.Mesh(bodyGeo, mat);
-      mesh.position.y = 0.55;
-      mesh.castShadow = true;
-      car.add(mesh);
-
-      const cabinGeo = new THREE.BoxGeometry(1.6, 0.5, 2.0);
-      const cabMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.2 });
-      const cab = new THREE.Mesh(cabinGeo, cabMat);
-      cab.position.set(0, 1.05, -0.1);
-      car.add(cab);
-
-      const laneZ = idx % 2 === 0 ? 0.5 : 5.5;
-      const initialX = -110 + idx * 45;
-      car.position.set(initialX, getTerrainHeight(initialX, laneZ), laneZ);
-      if (idx % 2 === 1) {
-        car.rotation.y = Math.PI; // heading westbound
-      }
-
-      this.group.add(car);
-      this.trafficVehicles.push({
-        mesh: car,
-        speed: 12 + Math.random() * 5,
-        minX: -130,
-        maxX: 45,
-        dir: idx % 2 === 0 ? 1 : -1,
-      });
-    });
-  }
-
-  /**
-   * Update all vehicles, physics, steering, and ambient traffic
+   * Update active player driven vehicle physics and steering
    */
   public update(
     delta: number,
-    getTerrainHeight: (x: number, z: number) => number,
-    checkObstacleCollision: (x: number, z: number, r: number) => boolean,
+    getTerrainHeight: (x: number, z: number, y?: number) => number,
+    checkObstacleCollision: (x: number, z: number, r: number, y?: number) => boolean,
   ) {
-    // 1. Update Active Player Driven Vehicle
     if (this.activePlayerVehicle) {
       const v = this.activePlayerVehicle;
       const pos = v.group.position;
@@ -359,8 +317,8 @@ export class VehicleManager {
       const nextX = pos.x + forwardX * v.velocity * delta;
       const nextZ = pos.z + forwardZ * v.velocity * delta;
 
-      // Obstacle collision check
-      if (!checkObstacleCollision(nextX, nextZ, 1.2)) {
+      // Obstacle collision check (passes pos.y to respect elevated bounds)
+      if (!checkObstacleCollision(nextX, nextZ, 1.2, pos.y)) {
         pos.x = nextX;
         pos.z = nextZ;
       } else {
@@ -368,8 +326,8 @@ export class VehicleManager {
         v.velocity = -v.velocity * 0.3;
       }
 
-      // Height alignment with terrain
-      pos.y = getTerrainHeight(pos.x, pos.z);
+      // Height alignment with terrain (passes pos.y to distinguish flyover overpass from lower road)
+      pos.y = getTerrainHeight(pos.x, pos.z, pos.y);
 
       // Apply steering turning rate
       if (Math.abs(v.velocity) > 0.1) {
@@ -396,17 +354,6 @@ export class VehicleManager {
       // Update synthesized Web Audio engine sounds
       const speedNorm = Math.abs(v.velocity) / v.config.maxSpeed;
       soundManager.updateVehicleEngine(speedNorm, Math.abs(v.velocity) > 0.5);
-    }
-
-    // 2. Ambient Traffic AI
-    for (const car of this.trafficVehicles) {
-      car.mesh.position.x += car.dir * car.speed * delta;
-      if (car.dir > 0 && car.mesh.position.x > car.maxX) {
-        car.mesh.position.x = car.minX;
-      } else if (car.dir < 0 && car.mesh.position.x < car.minX) {
-        car.mesh.position.x = car.maxX;
-      }
-      car.mesh.position.y = getTerrainHeight(car.mesh.position.x, car.mesh.position.z);
     }
   }
 

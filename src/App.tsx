@@ -76,6 +76,9 @@ export default function App() {
   const [timeOfDay, setTimeOfDay] = useState<number>(10.5);
   const [playerPos, setPlayerPos] = useState({ x: 6, y: 0, z: 12 });
   const [playerYaw, setPlayerYaw] = useState<number>(0);
+  const [playerStance, setPlayerStance] = useState<'stand' | 'crouch' | 'prone' | 'swim'>('stand');
+  const [isSwimming, setIsSwimming] = useState<boolean>(false);
+  const [customWaypoint, setCustomWaypoint] = useState<{ x: number; z: number } | null>(null);
   const [fps, setFps] = useState<number>(60);
   const [toastNotification, setToastNotification] = useState<{ title?: string; msg: string } | null>(null);
   const [isMobile, setIsMobile] = useState<boolean>(false);
@@ -117,7 +120,7 @@ export default function App() {
     setActiveQuest(engine.questManager.getActiveQuest());
     setPlayerStats({ ...engine.questManager.playerStats });
 
-    // Sync HUD state interval (position, vitals)
+    // Sync HUD state interval (position, vitals, stance)
     const hudInterval = setInterval(() => {
       if (!engineRef.current) return;
       const eng = engineRef.current;
@@ -126,6 +129,8 @@ export default function App() {
       setPlayerYaw(eng.playerRotation);
       setActiveQuest(eng.questManager.getActiveQuest());
       setPlayerStats({ ...eng.questManager.playerStats });
+      setPlayerStance(eng.playerStance);
+      setIsSwimming(eng.isSwimming);
     }, 80);
 
     // Global Key Handlers for M (Map), I (Inventory), Esc (Settings/Pause)
@@ -221,7 +226,7 @@ export default function App() {
       {/* Offline Status Banner */}
       <OfflineIndicator />
 
-      {/* Title Screen Overlay */}
+      {/* Title Screen Overlay / 3D Lobby */}
       {gameState === 'title' && (
         <TitleScreen
           onStartGame={handleStartGame}
@@ -231,6 +236,9 @@ export default function App() {
           onOpenAuth={() => setIsAuthOpen(true)}
           onOpenProfile={() => setIsProfileOpen(true)}
           onOpenCharacterSelect={() => setIsCharacterSelectOpen(true)}
+          onOpenInventory={() => setIsInventoryOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenMultiplayer={() => setIsMultiplayerOpen(true)}
         />
       )}
 
@@ -246,6 +254,7 @@ export default function App() {
             playerPos={playerPos}
             playerYaw={playerYaw}
             fps={fps}
+            customWaypoint={customWaypoint}
             onOpenMap={() => setIsMapOpen(true)}
             onOpenInventory={() => setIsInventoryOpen(true)}
             onOpenSettings={() => setIsSettingsOpen(true)}
@@ -256,13 +265,17 @@ export default function App() {
             onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
           />
 
-          {/* On-Screen Mobile Joystick Controls */}
+          {/* On-Screen Mobile Joystick & Tactical HUD Controls */}
           {isMobile && engineRef.current && (
             <MobileControls
               inputManager={engineRef.current.inputManager}
               isDriving={!!activeVehicle}
               canInteract={!!interactionPrompt && interactionPrompt.includes('Talk')}
               canDrive={!!interactionPrompt && interactionPrompt.includes('Drive')}
+              interactionPrompt={interactionPrompt}
+              playerStance={playerStance}
+              isSwimming={isSwimming}
+              onOpenInventory={() => setIsInventoryOpen(true)}
               onOpenMap={() => setIsMapOpen(true)}
             />
           )}
@@ -309,6 +322,8 @@ export default function App() {
           playerPos={playerPos}
           playerYaw={playerYaw}
           activeQuest={activeQuest}
+          customWaypoint={customWaypoint}
+          onSetWaypoint={(pt) => setCustomWaypoint(pt)}
           onClose={() => setIsMapOpen(false)}
           onTeleport={handleTeleport}
         />

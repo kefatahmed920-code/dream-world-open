@@ -11,6 +11,8 @@ export interface WorldObstacle {
   minZ: number;
   maxZ: number;
   height: number;
+  minY?: number;
+  maxY?: number;
 }
 
 /**
@@ -80,35 +82,46 @@ function createShopfrontTexture(
 
 /**
  * Procedural Brick-Pattern Sidewalk Texture
+ * Bangladeshi urban sidewalk running-bond terracotta pavers with beveled stone curbs
  */
 function createBrickSidewalkTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
+  canvas.width = 512;
+  canvas.height = 512;
   const ctx = canvas.getContext('2d')!;
 
-  // Base mortar grout color
+  // Base mortar grout bed
   ctx.fillStyle = '#94a3b8';
-  ctx.fillRect(0, 0, 256, 256);
+  ctx.fillRect(0, 0, 512, 512);
 
-  // Red/Terracotta Paver Bricks in Stretcher Bond
-  const brickH = 16;
-  const brickW = 32;
-  const colors = ['#b91c1c', '#991b1b', '#c2410c', '#a16207', '#b45309'];
+  // Red & Terracotta Paver Bricks in Stretcher Bond
+  const brickH = 32;
+  const brickW = 64;
+  const colors = ['#b91c1c', '#991b1b', '#c2410c', '#a16207', '#b45309', '#78350f', '#a855f7', '#854d0e'];
 
   let row = 0;
-  for (let y = 0; y < 256; y += brickH) {
+  for (let y = 0; y < 512; y += brickH) {
     const offset = (row % 2) * (brickW / 2);
-    for (let x = -brickW; x < 256 + brickW; x += brickW) {
-      const colIdx = Math.floor(Math.abs(Math.sin(x * 12 + y * 7)) * colors.length);
+    for (let x = -brickW; x < 512 + brickW; x += brickW) {
+      const colIdx = Math.floor(Math.abs(Math.sin(x * 12.3 + y * 7.7)) * colors.length) % colors.length;
       ctx.fillStyle = colors[colIdx];
-      ctx.fillRect(x + offset + 1.5, y + 1.5, brickW - 3, brickH - 3);
+      ctx.fillRect(x + offset + 2, y + 2, brickW - 4, brickH - 4);
 
-      // Subtle surface grain
-      ctx.fillStyle = 'rgba(0,0,0,0.08)';
-      ctx.fillRect(x + offset + 3, y + 3, brickW - 6, brickH - 6);
+      // Micro surface aggregate & weathered beveling
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.fillRect(x + offset + 3, y + 3, brickW - 6, 4);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+      ctx.fillRect(x + offset + 3, y + brickH - 6, brickW - 6, 4);
     }
     row++;
+  }
+
+  // Atmospheric surface dust & grain
+  for (let i = 0; i < 3000; i++) {
+    const rx = Math.random() * 512;
+    const ry = Math.random() * 512;
+    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)';
+    ctx.fillRect(rx, ry, 2, 2);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -116,6 +129,7 @@ function createBrickSidewalkTexture(): THREE.CanvasTexture {
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(4, 24);
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
   return texture;
 }
 
@@ -124,16 +138,24 @@ function createBrickSidewalkTexture(): THREE.CanvasTexture {
  */
 function createCurbTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 64;
+  canvas.width = 512;
+  canvas.height = 128;
   const ctx = canvas.getContext('2d')!;
 
-  const stripeW = 32;
-  for (let x = 0; x < 256; x += stripeW * 2) {
-    ctx.fillStyle = '#facc15'; // Dhaka Safety Yellow
-    ctx.fillRect(x, 0, stripeW, 64);
-    ctx.fillStyle = '#0f172a'; // Road Black
-    ctx.fillRect(x + stripeW, 0, stripeW, 64);
+  const stripeW = 64;
+  for (let x = 0; x < 512; x += stripeW * 2) {
+    // Dhaka Safety Yellow
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(x, 0, stripeW, 128);
+    // Subtle bevel & road dust on yellow
+    ctx.fillStyle = 'rgba(234, 179, 8, 0.35)';
+    ctx.fillRect(x, 0, stripeW, 8);
+
+    // Road Jet Black
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(x + stripeW, 0, stripeW, 128);
+    ctx.fillStyle = 'rgba(30, 41, 59, 0.4)';
+    ctx.fillRect(x + stripeW, 0, stripeW, 8);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -170,42 +192,91 @@ function createAwningTexture(c1 = '#b91c1c', c2 = '#f8fafc'): THREE.CanvasTextur
 }
 
 /**
- * Procedural Road Asphalt Texture with White Markings
+ * Procedural Realistic Charcoal Asphalt Texture
+ * Features fine mineral grain, organic bitumen repair patches, crisp lane lines, and edge markings
  */
 function createRoadTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
+  canvas.width = 512;
+  canvas.height = 512;
   const ctx = canvas.getContext('2d')!;
 
-  // Dark asphalt base
-  ctx.fillStyle = '#1c1f24';
-  ctx.fillRect(0, 0, 256, 256);
+  // 1. Deep charcoal/dark-grey asphalt base
+  ctx.fillStyle = '#15181c';
+  ctx.fillRect(0, 0, 512, 512);
 
-  // Asphalt grain noise
-  for (let i = 0; i < 4000; i++) {
-    const x = Math.random() * 256;
-    const y = Math.random() * 256;
-    const brightness = Math.random() * 40;
-    ctx.fillStyle = `rgba(${brightness}, ${brightness}, ${brightness}, 0.2)`;
+  // 2. Micro-aggregate mineral grain noise (quartzite, basalt, crushed limestone)
+  for (let i = 0; i < 9000; i++) {
+    const x = Math.random() * 512;
+    const y = Math.random() * 512;
+    const luma = 15 + Math.floor(Math.random() * 35);
+    ctx.fillStyle = `rgba(${luma}, ${luma + 2}, ${luma + 4}, 0.28)`;
     ctx.fillRect(x, y, 2, 2);
   }
 
-  // Center dashed yellow/white line
-  ctx.fillStyle = '#f6e05e';
-  ctx.fillRect(124, 20, 8, 80);
-  ctx.fillRect(124, 156, 8, 80);
+  // 3. Realistic organic road repair patches (dark bituminous mastic asphalt)
+  const patches = [
+    { x: 100, y: 80, rx: 34, ry: 22, rot: 0.2 },
+    { x: 380, y: 220, rx: 42, ry: 26, rot: -0.35 },
+    { x: 170, y: 390, rx: 38, ry: 28, rot: 0.15 },
+    { x: 340, y: 440, rx: 28, ry: 18, rot: -0.1 },
+  ];
 
-  // Edge solid white curbs
-  ctx.fillStyle = '#e2e8f0';
-  ctx.fillRect(6, 0, 8, 256);
-  ctx.fillRect(242, 0, 8, 256);
+  patches.forEach((p) => {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+
+    // Dark tar sealant rim outline
+    ctx.strokeStyle = '#090b0d';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, p.rx, p.ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Fresh dark asphalt patch infill
+    ctx.fillStyle = '#101214';
+    ctx.fill();
+
+    // Subtle fine aggregate inside patch
+    for (let j = 0; j < 350; j++) {
+      const gX = (Math.random() - 0.5) * p.rx * 1.6;
+      const gY = (Math.random() - 0.5) * p.ry * 1.6;
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(gX, gY, 1.5, 1.5);
+    }
+
+    ctx.restore();
+  });
+
+  // 4. Center Double Yellow Lines (for two-way traffic separated by median)
+  ctx.fillStyle = '#facc15'; // Dhaka Safety Golden Yellow
+  // Two distinct continuous yellow lines separated by 8px median center
+  ctx.fillRect(250, 0, 4, 512);
+  ctx.fillRect(258, 0, 4, 512);
+
+  // 5. Directional White Dashed Lane Dividers
+  // Westbound lane divider at X = 130
+  ctx.fillStyle = '#f8fafc';
+  for (let y = 15; y < 512; y += 80) {
+    ctx.fillRect(128, y, 5, 48);
+  }
+  // Eastbound lane divider at X = 380
+  for (let y = 15; y < 512; y += 80) {
+    ctx.fillRect(380, y, 5, 48);
+  }
+
+  // 6. Solid Crisp White Edge Fog Lines along Curbs
+  ctx.fillStyle = '#f1f5f9';
+  ctx.fillRect(14, 0, 8, 512);
+  ctx.fillRect(490, 0, 8, 512);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(1, 8);
+  texture.repeat.set(1, 10);
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
   return texture;
 }
 
@@ -254,11 +325,60 @@ function createTinRoofTexture(): THREE.CanvasTexture {
   return texture;
 }
 
+/**
+ * Procedural Padma River Water & Wave Texture
+ * Dynamic gentle sinusoidal ripples and sparkling surface flow
+ */
+function createRiverWaterTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  // Deep Padma emerald-cerulean water base
+  ctx.fillStyle = '#164e63';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Soft river flow lines and gentle sinusoidal ripples
+  ctx.strokeStyle = 'rgba(103, 232, 249, 0.22)';
+  ctx.lineWidth = 2.5;
+  for (let y = 0; y < 512; y += 12) {
+    ctx.beginPath();
+    for (let x = 0; x < 512; x += 16) {
+      const cy = y + Math.sin(x * 0.05 + y * 0.02) * 5;
+      if (x === 0) ctx.moveTo(x, cy);
+      else ctx.lineTo(x, cy);
+    }
+    ctx.stroke();
+  }
+
+  // Sparkling wave highlights & gentle foam specks
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.lineWidth = 1.4;
+  for (let i = 0; i < 220; i++) {
+    const rx = Math.random() * 500;
+    const ry = Math.random() * 500;
+    const len = 15 + Math.random() * 35;
+    ctx.beginPath();
+    ctx.moveTo(rx, ry);
+    ctx.lineTo(rx + len, ry + Math.sin(rx * 0.1) * 2);
+    ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2, 16);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 export class WorldTerrain {
   public group: THREE.Group;
   public obstacles: WorldObstacle[] = [];
   public waterfallMesh: THREE.Mesh | null = null;
   public riverMesh: THREE.Mesh | null = null;
+  public riverWaterTex: THREE.CanvasTexture | null = null;
 
   private waterfallTexOffset = 0;
   private riverTexOffset = 0;
@@ -279,37 +399,77 @@ export class WorldTerrain {
   /**
    * Continuous Analytical Height Function
    * Provides rock-solid y-elevation for player, vehicles, NPCs, and camera collision.
+   * Supports vertical layer awareness via currentY (e.g. flyover overpass vs lower road).
    */
-  public getTerrainHeight(x: number, z: number): number {
-    // 1. Grand Bridge Deck (Crossing the Padma River at Z between -20 and +30, X between 50 and 120)
-    if (x >= 50 && x <= 125 && z >= -18 && z <= 24) {
-      // Smooth approach ramp on both sides
+  public getTerrainHeight(x: number, z: number, currentY?: number): number {
+    // 1. Classical Chinese Pavilion Bridge across Padma River (X: 50 to 125, Z centered at 3, widened 18m deck: Z from -6.5 to 12.5)
+    if (x >= 50 && x <= 125 && z >= -6.5 && z <= 12.5) {
+      // West approach ramp (X: 50 -> 65): ascends smoothly from city avenue 0.03 to bridge deck 4.2
       if (x < 65) {
-        return THREE.MathUtils.lerp(0.0, 4.2, (x - 50) / 15);
-      } else if (x > 110) {
+        return THREE.MathUtils.lerp(0.03, 4.2, (x - 50) / 15);
+      }
+      // East approach ramp (X: 110 -> 125): descends smoothly from bridge deck 4.2 to village road 0.5
+      else if (x > 110) {
         return THREE.MathUtils.lerp(4.2, 0.5, (x - 110) / 15);
       }
-      return 4.2; // Bridge deck height
+      // Main Bridge Span deck: solid 4.2m elevation
+      return 4.2;
     }
 
-    // 2. Flyover Expressway in City (X between -80 and -20, Z between -120 and 40)
-    if (x >= -45 && x <= -25 && z >= -100 && z <= 30) {
+    // 2. Modern Pedestrian Foot-Overbridge across Dhanmondi City Avenue (at X = 0, deck Y = 5.2)
+    // Multi-level height: lower roadway passes underneath freely at 0.03; pedestrians on stairs/deck climb to 5.2
+    if (currentY !== undefined && currentY > 1.2) {
+      // Overbridge Main Walkway Deck (X: -1.8 to 1.8, Z: -8.8 to 14.8)
+      if (x >= -1.8 && x <= 1.8 && z >= -8.8 && z <= 14.8) {
+        return 5.2;
+      }
+      // South Stairs (Z: 13.2 to 16.4, X: 0.0 to 8.5): descends Eastward from 5.2 to sidewalk 0.16
+      if (z >= 13.2 && z <= 16.4 && x >= 0.0 && x <= 8.5) {
+        return THREE.MathUtils.lerp(5.2, 0.16, x / 8.5);
+      }
+      // North Stairs (Z: -10.4 to -7.2, X: 0.0 to 8.5): descends Eastward from 5.2 to sidewalk 0.16
+      if (z >= -10.4 && z <= -7.2 && x >= 0.0 && x <= 8.5) {
+        return THREE.MathUtils.lerp(5.2, 0.16, x / 8.5);
+      }
+    }
+
+    // 3. City Flyover Expressway (Elevated highway along X: -40 to -30, Z: -100 to 30)
+    if (x >= -40 && x <= -30 && z >= -100 && z <= 30) {
+      // Lower road underpass corridor (Main East-West Avenue at Z: -10 to +16)
+      if (z >= -10 && z <= 16) {
+        // If entity is at lower road level (or unspecified default), they drive smoothly under the flyover!
+        if (currentY === undefined || currentY < 4.5) {
+          return 0.03; // Lower city avenue roadway
+        }
+        return 7.5; // Upper flyover deck
+      }
+
+      // North flyover approach ramp (Z: -100 -> -80): ascends from 0.0 to 7.5
       if (z < -80) {
         return THREE.MathUtils.lerp(0.0, 7.5, (z - -100) / 20);
-      } else if (z > 15) {
-        return THREE.MathUtils.lerp(7.5, 0.0, (z - 15) / 15);
       }
-      return 7.5; // Flyover elevation
+      // South flyover approach ramp (Z: 16 -> 30): descends from 7.5 to 0.0
+      else if (z > 16) {
+        return THREE.MathUtils.lerp(7.5, 0.0, (z - 16) / 14);
+      }
+      // Flyover elevated expressway deck
+      return 7.5;
     }
 
-    // 3. Wide River Channel (X between 65 and 110, anywhere outside bridge)
+    // 3. Wide River Channel (outside the bridge deck)
     const riverDist = Math.abs(x - 87.5);
     if (riverDist < 25) {
-      const riverDepth = -3.2 * (1 - riverDist / 25);
-      return riverDepth;
+      // Sloping riverbed ground elevation beneath water
+      const bedY = this.getGroundElevation(x, z);
+      // If entity is floating/swimming (currentY near surface >= -0.7), return swimming float level (-0.45)
+      // Otherwise return actual solid riverbed ground so players enter and exit water naturally!
+      if (currentY !== undefined && currentY >= -0.7) {
+        return -0.45;
+      }
+      return bedY;
     }
 
-    // 4. Mountain & Waterfall Range (X > 190, Z < 10)
+    // 4. Mountain & Waterfall Range (X > 180, Z < 25)
     if (x > 180 && z < 25) {
       const hillDistX = (x - 180) / 120; // 0 to 1+
       const hillDistZ = (25 - z) / 120; // 0 to 1+
@@ -322,22 +482,86 @@ export class WorldTerrain {
       // Mountain Trail carve-out (leads to waterfall at [270, -100])
       const trailDist = Math.abs((x - 240) * 0.6 + (z + 40) * 0.8);
       if (trailDist < 7) {
-        // Flatten trail slope for smooth walking/driving
         return Math.max(0.5, baseMountain * 0.45);
       }
 
       return Math.max(0.5, baseMountain);
     }
 
-    // 5. Bengali Countryside & Village (X: 115 to 220, Z: 30 to 180)
-    if (x >= 115 && z >= 25) {
-      // Gentle rolling agricultural mounds and paddy bunds
+    // 5. Bengali Countryside & Village (X: 112.5 to 220, Z: 25 to 180)
+    if (x >= 112.5 && z >= 25) {
       const ridge = Math.sin(x * 0.08) * 0.4 + Math.cos(z * 0.08) * 0.4;
       return 0.5 + ridge;
     }
 
-    // 6. City Region (Flat paved surface)
+    // 6. City Region (Flat paved surface at Y = 0.03 for roads, 0.0 for ground)
+    return 0.03;
+  }
+
+  /**
+   * Natural Ground Mesh Elevation
+   * Pure terrain, riverbed, hills, and plains.
+   * Completely uncovers the riverbed under the bridge so water flows uninterrupted from one side to the other.
+   * Keeps city ground level at 0.0 under the overpass.
+   */
+  public getGroundElevation(x: number, z: number): number {
+    // 1. Wide River Channel (X between 62.5 and 112.5)
+    // Continuous sunken riverbed along the ENTIRE map from north to south, including under the bridge!
+    const riverDist = Math.abs(x - 87.5);
+    if (riverDist < 25) {
+      return -3.2 * (1 - riverDist / 25);
+    }
+
+    // 2. Mountain & Waterfall Range (X > 180, Z < 25)
+    if (x > 180 && z < 25) {
+      const hillDistX = (x - 180) / 120;
+      const hillDistZ = (25 - z) / 120;
+      const hillFactor = Math.min(1.8, Math.max(0, hillDistX * 0.7 + hillDistZ * 0.6));
+      const peakHeight = Math.sin(x * 0.02) * Math.cos(z * 0.02) * 8;
+      const baseMountain = Math.pow(hillFactor, 1.6) * 26 + peakHeight;
+
+      const trailDist = Math.abs((x - 240) * 0.6 + (z + 40) * 0.8);
+      if (trailDist < 7) {
+        return Math.max(0.5, baseMountain * 0.45);
+      }
+      return Math.max(0.5, baseMountain);
+    }
+
+    // 3. Bengali Countryside & Village (X: 112.5 to 220, Z: 25 to 180)
+    if (x >= 112.5 && z >= 25) {
+      const ridge = Math.sin(x * 0.08) * 0.4 + Math.cos(z * 0.08) * 0.4;
+      return 0.5 + ridge;
+    }
+
+    // 4. City Region (Flat paved ground at Y = 0.0)
     return 0.0;
+  }
+
+  /**
+   * Check if coordinate is inside Padma River water body
+   * Excludes upper bridge deck so vehicles and pedestrians crossing bridge are not in water.
+   */
+  public isWater(x: number, z: number, y?: number): boolean {
+    const riverDist = Math.abs(x - 87.5);
+    if (riverDist < 25) {
+      // If entity is on bridge span (X: 50 to 125, Z: -6.5 to 12.5) with elevation >= 2.0, they are on bridge deck
+      if (x >= 50 && x <= 125 && z >= -6.5 && z <= 12.5) {
+        if (y !== undefined && y >= 2.0) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Depth of water at coordinate (depth between water surface -0.4 and ground bed)
+   */
+  public getWaterDepth(x: number, z: number, y?: number): number {
+    if (!this.isWater(x, z, y)) return 0;
+    const bed = this.getGroundElevation(x, z);
+    return Math.max(0, -0.4 - bed);
   }
 
   /**
@@ -355,22 +579,22 @@ export class WorldTerrain {
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
-      const y = this.getTerrainHeight(x, z);
+      const y = this.getGroundElevation(x, z);
       pos.setY(i, y);
 
       // Vertex color blending based on region & altitude
       let r = 0.22, g = 0.42, b = 0.18; // Default lush green
 
-      if (x < 65) {
+      if (x < 62.5) {
         // City paved zone
         r = 0.28; g = 0.3; b = 0.32;
       } else if (Math.abs(x - 87.5) < 26) {
-        // Riverbed silt / sand
-        r = 0.45; g = 0.4; b = 0.28;
+        // Riverbed silt / sand under the water
+        r = 0.38; g = 0.34; b = 0.24;
       } else if (y > 12) {
         // Mountain rocky slopes
         r = 0.42; g = 0.44; b = 0.38;
-      } else if (x > 115 && z > 30) {
+      } else if (x > 112.5 && z > 30) {
         // Golden green paddy fields
         r = 0.35; g = 0.55; b = 0.15;
       }
@@ -395,76 +619,432 @@ export class WorldTerrain {
   }
 
   /**
-   * River Padma and the Grand Suspension Bridge
+   * Classical Chinese-Inspired Bridge Architecture across River Padma
+   * Preserves exact location (X: 50 to 125, Z: 3), road connections, supports, collision, and vehicle clearance.
+   * Riverbed is carved out beneath, making water visible flowing from north to south.
    */
   private buildRiverAndBridge() {
-    // 1. Animated River Water
-    const riverGeo = new THREE.PlaneGeometry(60, 650, 1, 60);
+    // 1. Animated River Water with Procedural Waves & Ripples
+    this.riverWaterTex = createRiverWaterTexture();
+    const riverGeo = new THREE.PlaneGeometry(65, 650, 4, 80);
     riverGeo.rotateX(-Math.PI / 2);
     const riverMat = new THREE.MeshStandardMaterial({
-      color: 0x1a4855,
-      roughness: 0.15,
-      metalness: 0.4,
+      map: this.riverWaterTex,
+      color: 0x22d3ee,
+      roughness: 0.18,
+      metalness: 0.35,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.88,
     });
     this.riverMesh = new THREE.Mesh(riverGeo, riverMat);
     this.riverMesh.position.set(87.5, -0.4, 0);
     this.group.add(this.riverMesh);
 
-    // 2. Grand Bridge Deck
-    const bridgeLength = 75;
-    const bridgeWidth = 14;
-    const bridgeGeo = new THREE.BoxGeometry(bridgeLength, 0.9, bridgeWidth);
-    const bridgeRoadTex = createRoadTexture();
-    const bridgeMat = new THREE.MeshStandardMaterial({
-      map: bridgeRoadTex,
+    // Natural gently sloped riverbank shores and foam edge transitions (X: 62.5 and X: 112.5)
+    // West sandy shoreline transition (connecting city to river)
+    const westShoreGeo = new THREE.PlaneGeometry(6, 650, 1, 40);
+    westShoreGeo.rotateX(-Math.PI / 2);
+    const shoreSandMat = new THREE.MeshStandardMaterial({
+      color: 0xb59b73, // Natural sandy silt riverbank
+      roughness: 0.92,
+      metalness: 0.05,
+    });
+    const westShore = new THREE.Mesh(westShoreGeo, shoreSandMat);
+    westShore.position.set(62.5, -0.15, 0);
+    westShore.rotation.z = -0.06; // gentle slope toward water
+    westShore.receiveShadow = true;
+    this.group.add(westShore);
+
+    // East village shoreline transition
+    const eastShoreGeo = new THREE.PlaneGeometry(6, 650, 1, 40);
+    eastShoreGeo.rotateX(-Math.PI / 2);
+    const eastShore = new THREE.Mesh(eastShoreGeo, shoreSandMat);
+    eastShore.position.set(112.5, -0.15, 0);
+    eastShore.rotation.z = 0.06;
+    eastShore.receiveShadow = true;
+    this.group.add(eastShore);
+
+    // Riverbank water foam ribbons along both shores
+    const foamMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.45,
+    });
+    const westFoamGeo = new THREE.PlaneGeometry(1.4, 650);
+    westFoamGeo.rotateX(-Math.PI / 2);
+    const westFoam = new THREE.Mesh(westFoamGeo, foamMat);
+    westFoam.position.set(63.2, -0.36, 0);
+    this.group.add(westFoam);
+
+    const eastFoamGeo = new THREE.PlaneGeometry(1.4, 650);
+    eastFoamGeo.rotateX(-Math.PI / 2);
+    const eastFoam = new THREE.Mesh(eastFoamGeo, foamMat);
+    eastFoam.position.set(111.8, -0.36, 0);
+    this.group.add(eastFoam);
+
+    // Common Materials for Chinese Bridge Architecture
+    const roadTex = createRoadTexture();
+    const bridgeRoadMat = new THREE.MeshStandardMaterial({
+      map: roadTex,
       roughness: 0.7,
+      metalness: 0.15,
+    });
+
+    const graniteStoneMat = new THREE.MeshStandardMaterial({
+      color: 0x64748b, // Weathered grey river granite
+      roughness: 0.85,
+      metalness: 0.1,
+    });
+
+    const vermilionMat = new THREE.MeshStandardMaterial({
+      color: 0xb91c1c, // Imperial Vermilion Red Timber
+      roughness: 0.5,
+      metalness: 0.1,
+    });
+
+    const darkVermilionMat = new THREE.MeshStandardMaterial({
+      color: 0x7f1d1d, // Deep Cinnabar Red
+      roughness: 0.6,
+    });
+
+    const roofSlateMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b, // Deep Charcoal/Slate Glazed Ceramic Tiles
+      roughness: 0.4,
       metalness: 0.2,
     });
-    const bridgeMesh = new THREE.Mesh(bridgeGeo, bridgeMat);
-    bridgeMesh.position.set(87.5, 3.8, 3);
-    bridgeMesh.castShadow = true;
-    bridgeMesh.receiveShadow = true;
-    this.group.add(bridgeMesh);
 
-    // Bridge Concrete Pylons
-    [-1, 1].forEach((side) => {
-      const pylonGeo = new THREE.BoxGeometry(4.5, 24, 2.5);
-      const pylonMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.8 });
-      const pylon = new THREE.Mesh(pylonGeo, pylonMat);
-      pylon.position.set(87.5 + side * 22, 10, 3);
-      pylon.castShadow = true;
-      this.group.add(pylon);
-
-      // Suspension Cables
-      const cableGeo = new THREE.CylinderGeometry(0.08, 0.08, 48, 8);
-      cableGeo.rotateZ(side * 0.45);
-      const cableMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, metalness: 0.9, roughness: 0.2 });
-      const cable = new THREE.Mesh(cableGeo, cableMat);
-      cable.position.set(87.5 + side * 11, 12, 3);
-      this.group.add(cable);
+    const goldAccentMat = new THREE.MeshStandardMaterial({
+      color: 0xf59e0b, // Imperial Gold Leaf Accent
+      roughness: 0.3,
+      metalness: 0.8,
     });
 
-    // Bridge Guardrails
-    const railMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.5 });
-    [-1, 1].forEach((sideZ) => {
-      const railGeo = new THREE.BoxGeometry(bridgeLength, 1.2, 0.4);
-      const rail = new THREE.Mesh(railGeo, railMat);
-      rail.position.set(87.5, 4.8, 3 + sideZ * (bridgeWidth / 2 - 0.3));
-      rail.castShadow = true;
-      this.group.add(rail);
+    const lanternGlowMat = new THREE.MeshStandardMaterial({
+      color: 0xef4444, // Glowing Red Silk Lantern
+      emissive: 0xd97706,
+      emissiveIntensity: 0.6,
+      roughness: 0.3,
+    });
 
+    // 2. Main Bridge Deck Span (X: 65 to 110, widened 18m deck, deck top Y = 4.2)
+    const spanLength = 45;
+    const spanWidth = 18;
+    const deckThickness = 0.9;
+    const mainDeckGeo = new THREE.BoxGeometry(spanLength, deckThickness, spanWidth);
+    const mainDeck = new THREE.Mesh(mainDeckGeo, bridgeRoadMat);
+    mainDeck.position.set(87.5, 3.75, 3);
+    mainDeck.castShadow = true;
+    mainDeck.receiveShadow = true;
+    this.group.add(mainDeck);
+
+    // Granite Stone Fascia Edges on both sides of deck
+    [-1, 1].forEach((sideZ) => {
+      const edgeGeo = new THREE.BoxGeometry(spanLength, 1.1, 0.4);
+      const edge = new THREE.Mesh(edgeGeo, graniteStoneMat);
+      edge.position.set(87.5, 3.75, 3 + sideZ * 9.1);
+      edge.castShadow = true;
+      this.group.add(edge);
+    });
+
+    // 3. West Approach Ramp (X: 50 to 65, sloped connecting City Avenue at 0.03 to Deck at 4.2)
+    const rampLength = 15;
+    const westRampGeo = new THREE.BoxGeometry(rampLength, deckThickness, spanWidth);
+    const westRamp = new THREE.Mesh(westRampGeo, bridgeRoadMat);
+    // Slope angle: rise 4.17m over 15m run
+    const westRampAngle = Math.atan2(4.17, rampLength);
+    westRamp.rotation.z = -westRampAngle;
+    westRamp.position.set(57.5, 2.1, 3);
+    westRamp.castShadow = true;
+    westRamp.receiveShadow = true;
+    this.group.add(westRamp);
+
+    // West Stone Retaining Abutment Walls
+    [-1, 1].forEach((sideZ) => {
+      const wallGeo = new THREE.BoxGeometry(rampLength, 3.5, 0.6);
+      const wall = new THREE.Mesh(wallGeo, graniteStoneMat);
+      wall.position.set(57.5, 1.2, 3 + sideZ * 9.2);
+      wall.castShadow = true;
+      this.group.add(wall);
+    });
+
+    // 4. East Approach Ramp (X: 110 to 125, sloped connecting Deck at 4.2 to Village Road at 0.5)
+    const eastRampGeo = new THREE.BoxGeometry(rampLength, deckThickness, spanWidth);
+    const eastRamp = new THREE.Mesh(eastRampGeo, bridgeRoadMat);
+    const eastRampAngle = Math.atan2(3.7, rampLength);
+    eastRamp.rotation.z = eastRampAngle;
+    eastRamp.position.set(117.5, 2.35, 3);
+    eastRamp.castShadow = true;
+    eastRamp.receiveShadow = true;
+    this.group.add(eastRamp);
+
+    // East Stone Retaining Abutment Walls
+    [-1, 1].forEach((sideZ) => {
+      const wallGeo = new THREE.BoxGeometry(rampLength, 3.5, 0.6);
+      const wall = new THREE.Mesh(wallGeo, graniteStoneMat);
+      wall.position.set(117.5, 1.2, 3 + sideZ * 9.2);
+      wall.castShadow = true;
+      this.group.add(wall);
+    });
+
+    // 5. Classical Chinese Stone Masonry Piers with Pointed Cutwaters (分水尖)
+    // 3 Piers in the river: X = 74, 87.5, 101. Riverbed at -3.2, Deck bottom at 3.3 (Height = 6.5m)
+    const pierXPositions = [74, 87.5, 101];
+    pierXPositions.forEach((px) => {
+      const pierGroup = new THREE.Group();
+      pierGroup.position.set(px, 0.05, 3);
+
+      // Main Pier Shaft
+      const pierBodyGeo = new THREE.BoxGeometry(3.8, 6.5, 20.5);
+      const pierBody = new THREE.Mesh(pierBodyGeo, graniteStoneMat);
+      pierBody.castShadow = true;
+      pierBody.receiveShadow = true;
+      pierGroup.add(pierBody);
+
+      // Stepped Corbel Stone Brackets (斗拱式石托) under the deck
+      const corbelGeo1 = new THREE.BoxGeometry(5.2, 0.7, 20.5);
+      const corbel1 = new THREE.Mesh(corbelGeo1, graniteStoneMat);
+      corbel1.position.y = 3.0;
+      corbel1.castShadow = true;
+      pierGroup.add(corbel1);
+
+      // Triangular Pointed Cutwaters (分水尖) at North (Upstream) and South (Downstream) ends
+      [-1, 1].forEach((dirZ) => {
+        const cutwaterGeo = new THREE.CylinderGeometry(0.1, 1.9, 6.5, 3);
+        cutwaterGeo.rotateY(dirZ > 0 ? Math.PI : 0);
+        const cutwater = new THREE.Mesh(cutwaterGeo, graniteStoneMat);
+        cutwater.position.set(0, 0, dirZ * 11.2);
+        cutwater.castShadow = true;
+        pierGroup.add(cutwater);
+      });
+
+      this.group.add(pierGroup);
+    });
+
+    // 6. Classical Red & Gold Railings (朱红雕花栏杆) with Obstacle Collisions
+    // Spans the entire bridge length from X = 50 to 125 along both sides
+    [-1, 1].forEach((sideZ) => {
+      const railZ = 3 + sideZ * 8.9;
+
+      // Base Granite Curb
+      const curbGeo = new THREE.BoxGeometry(75, 0.35, 0.4);
+      const curb = new THREE.Mesh(curbGeo, graniteStoneMat);
+      curb.position.set(87.5, 4.35, railZ);
+      curb.castShadow = true;
+      this.group.add(curb);
+
+      // Vermilion Timber Top Rail
+      const topRailGeo = new THREE.BoxGeometry(75, 0.16, 0.25);
+      const topRail = new THREE.Mesh(topRailGeo, vermilionMat);
+      topRail.position.set(87.5, 5.25, railZ);
+      topRail.castShadow = true;
+      this.group.add(topRail);
+
+      // Geometric Lattice Panel (花窗栏板)
+      const panelGeo = new THREE.BoxGeometry(75, 0.65, 0.12);
+      const panel = new THREE.Mesh(panelGeo, darkVermilionMat);
+      panel.position.set(87.5, 4.85, railZ);
+      this.group.add(panel);
+
+      // Classical Timber Posts with Gold Lotus-Bud Finials (莲花柱头)
+      for (let px = 51; px <= 124; px += 3.0) {
+        const postGeo = new THREE.BoxGeometry(0.24, 1.1, 0.24);
+        const post = new THREE.Mesh(postGeo, vermilionMat);
+        post.position.set(px, 4.85, railZ);
+        post.castShadow = true;
+        this.group.add(post);
+
+        const finialGeo = new THREE.SphereGeometry(0.12, 8, 8);
+        const finial = new THREE.Mesh(finialGeo, goldAccentMat);
+        finial.position.set(px, 5.45, railZ);
+        this.group.add(finial);
+      }
+
+      // Solid Safety Obstacle Boundary (prevents vehicles & players falling into river)
       this.obstacles.push({
         minX: 50,
         maxX: 125,
-        minZ: 3 + sideZ * (bridgeWidth / 2 - 0.3) - 0.3,
-        maxZ: 3 + sideZ * (bridgeWidth / 2 - 0.3) + 0.3,
-        height: 5.5,
+        minZ: railZ - 0.4,
+        maxZ: railZ + 0.4,
+        height: 6.0,
+        minY: 3.5,
+        maxY: 7.0,
       });
     });
 
-    // 3. Wooden Country Boats ('Nouka') bobbing along the pier
+    // 7. Twin Imperial Entrance Paifang Gateways (牌坊)
+    // West Gateway at X = 65, East Gateway at X = 110
+    // VEHICLE CLEARANCE: Main lintel at Y = 10.2 (Clearance = 6.0m above 4.2m deck)
+    // Road opening width = 18.6m (columns at Z = -6.3 and Z = 12.3)
+    [65, 110].forEach((gateX) => {
+      const gateGroup = new THREE.Group();
+      gateGroup.position.set(gateX, 4.2, 3);
+
+      // 4 Vermilion Timber Columns (2 Inner flanking the 18m road, 2 Outer)
+      const columnPositionsZ = [-9.3, -6.3, 12.3, 15.3];
+      columnPositionsZ.forEach((colZ, idx) => {
+        const isInner = idx === 1 || idx === 2;
+        const colHeight = isInner ? 6.5 : 5.0;
+
+        // White Granite Stone Column Base (抱鼓石)
+        const baseGeo = new THREE.BoxGeometry(0.9, 0.8, 0.9);
+        const base = new THREE.Mesh(baseGeo, graniteStoneMat);
+        base.position.set(0, 0.4, colZ);
+        base.castShadow = true;
+        gateGroup.add(base);
+
+        // Vermilion Lacquer Timber Column
+        const colGeo = new THREE.CylinderGeometry(0.32, 0.35, colHeight, 12);
+        const col = new THREE.Mesh(colGeo, vermilionMat);
+        col.position.set(0, 0.8 + colHeight / 2, colZ);
+        col.castShadow = true;
+        gateGroup.add(col);
+
+        // Gold Column Ring Capitals
+        const capGeo = new THREE.CylinderGeometry(0.42, 0.38, 0.25, 12);
+        const cap = new THREE.Mesh(capGeo, goldAccentMat);
+        cap.position.set(0, 0.8 + colHeight, colZ);
+        gateGroup.add(cap);
+      });
+
+      // Main Crossbeam Lintel (额枋) across the 18m roadway at Y = 6.0 above deck (World Y = 10.2)
+      const mainBeamGeo = new THREE.BoxGeometry(1.0, 0.55, 19.6);
+      const mainBeam = new THREE.Mesh(mainBeamGeo, vermilionMat);
+      mainBeam.position.set(0, 6.0, 3);
+      mainBeam.castShadow = true;
+      gateGroup.add(mainBeam);
+
+      // Stepped Dougang Bracket Sets (斗栱)
+      const bracketGeo = new THREE.BoxGeometry(1.4, 0.35, 20.2);
+      const bracket = new THREE.Mesh(bracketGeo, goldAccentMat);
+      bracket.position.set(0, 6.35, 3);
+      gateGroup.add(bracket);
+
+      // Central Imperial Plaque / Tablet (匾额)
+      const plaqueGeo = new THREE.BoxGeometry(0.8, 0.65, 3.2);
+      const plaque = new THREE.Mesh(plaqueGeo, darkVermilionMat);
+      plaque.position.set(0, 5.5, 3);
+      gateGroup.add(plaque);
+
+      const plaqueGoldBorder = new THREE.Mesh(
+        new THREE.BoxGeometry(0.85, 0.72, 3.3),
+        goldAccentMat,
+      );
+      plaqueGoldBorder.position.set(0, 5.5, 3);
+      gateGroup.add(plaqueGoldBorder);
+
+      // Sweeping Curved Pagoda Eaves (飞檐) over Main Road
+      // Bottom roof tier
+      const roofBottomGeo = new THREE.BoxGeometry(2.4, 0.35, 21.5);
+      const roofBottom = new THREE.Mesh(roofBottomGeo, roofSlateMat);
+      roofBottom.position.set(0, 6.65, 3);
+      roofBottom.castShadow = true;
+      gateGroup.add(roofBottom);
+
+      // Flared swept-up hip rafter eaves (飞檐角) on both outer corners
+      [-1, 1].forEach((dirZ) => {
+        const flareGeo = new THREE.ConeGeometry(0.8, 1.4, 4);
+        flareGeo.rotateZ(Math.PI / 4);
+        flareGeo.rotateY(dirZ > 0 ? 0 : Math.PI);
+        const flare = new THREE.Mesh(flareGeo, roofSlateMat);
+        flare.position.set(0, 7.1, 3 + dirZ * 11.2);
+        gateGroup.add(flare);
+      });
+
+      // Upper Roof Tier
+      const roofTopGeo = new THREE.BoxGeometry(1.8, 0.45, 11.0);
+      const roofTop = new THREE.Mesh(roofTopGeo, roofSlateMat);
+      roofTop.position.set(0, 7.1, 3);
+      roofTop.castShadow = true;
+      gateGroup.add(roofTop);
+
+      // Golden Ridge Finials (吻兽 / 宝顶)
+      const ridgeFinialGeo = new THREE.CylinderGeometry(0.08, 0.25, 0.8, 8);
+      const ridgeFinial = new THREE.Mesh(ridgeFinialGeo, goldAccentMat);
+      ridgeFinial.position.set(0, 7.7, 3);
+      gateGroup.add(ridgeFinial);
+
+      this.group.add(gateGroup);
+    });
+
+    // 8. Twin Mid-Span Moon-Viewing Pagoda Pavilions (望月亭)
+    // Positioned at X = 87.5 on cantilevered stone side balconies:
+    // North Balcony at Z = 12.0 (outside road Z = 10 to 14.5)
+    // South Balcony at Z = -6.0 (outside road Z = -4 to -8.5)
+    // Central 14-meter roadway remains 100% OPEN for vehicles!
+    [-1, 1].forEach((sideZ) => {
+      const pavZ = 3 + sideZ * 9.2;
+      const pavGroup = new THREE.Group();
+      pavGroup.position.set(87.5, 4.2, pavZ);
+
+      // Cantilevered Stone Balcony Platform
+      const platGeo = new THREE.BoxGeometry(8.5, 0.6, 5.2);
+      const plat = new THREE.Mesh(platGeo, graniteStoneMat);
+      plat.position.set(0, -0.3, 0);
+      plat.castShadow = true;
+      plat.receiveShadow = true;
+      pavGroup.add(plat);
+
+      // Classical Balcony Railings
+      const balRailGeo = new THREE.BoxGeometry(8.5, 0.8, 0.2);
+      const balRail = new THREE.Mesh(balRailGeo, vermilionMat);
+      balRail.position.set(0, 0.4, sideZ * 2.4);
+      pavGroup.add(balRail);
+
+      // 6 Vermilion Lacquer Pillars for Octagonal Pagoda Pavilion
+      const pillarAngles = [0, Math.PI / 3, (2 * Math.PI) / 3, Math.PI, (4 * Math.PI) / 3, (5 * Math.PI) / 3];
+      const radius = 2.2;
+      pillarAngles.forEach((ang) => {
+        const px = Math.cos(ang) * radius;
+        const pz = Math.sin(ang) * (radius * 0.85);
+
+        const pillarGeo = new THREE.CylinderGeometry(0.18, 0.2, 3.8, 10);
+        const pillar = new THREE.Mesh(pillarGeo, vermilionMat);
+        pillar.position.set(px, 1.9, pz);
+        pillar.castShadow = true;
+        pavGroup.add(pillar);
+
+        // Hanging Chinese Silk Lanterns (红灯笼) with Gold Tassels
+        const lanternGeo = new THREE.SphereGeometry(0.32, 10, 10);
+        lanternGeo.scale(1, 1.3, 1);
+        const lantern = new THREE.Mesh(lanternGeo, lanternGlowMat);
+        lantern.position.set(px, 3.4, pz);
+        pavGroup.add(lantern);
+
+        const tasselGeo = new THREE.CylinderGeometry(0.04, 0.1, 0.4, 6);
+        const tassel = new THREE.Mesh(tasselGeo, goldAccentMat);
+        tassel.position.set(px, 2.75, pz);
+        pavGroup.add(tassel);
+      });
+
+      // Lower Pagoda Flared Eaves Roof Tier
+      const lowerEavesGeo = new THREE.ConeGeometry(3.6, 1.2, 8);
+      const lowerEaves = new THREE.Mesh(lowerEavesGeo, roofSlateMat);
+      lowerEaves.position.set(0, 4.2, 0);
+      lowerEaves.castShadow = true;
+      pavGroup.add(lowerEaves);
+
+      // Upper Pagoda Roof Tier
+      const upperEavesGeo = new THREE.ConeGeometry(2.5, 1.1, 8);
+      const upperEaves = new THREE.Mesh(upperEavesGeo, roofSlateMat);
+      upperEaves.position.set(0, 5.1, 0);
+      upperEaves.castShadow = true;
+      pavGroup.add(upperEaves);
+
+      // Golden Pagoda Spire Finial (宝顶)
+      const finialGeo = new THREE.CylinderGeometry(0.05, 0.25, 1.2, 8);
+      const finial = new THREE.Mesh(finialGeo, goldAccentMat);
+      finial.position.set(0, 6.0, 0);
+      pavGroup.add(finial);
+
+      // Warm Amber Lantern Light for Atmospheric Glow
+      const lanternLight = new THREE.PointLight(0xf59e0b, 1.2, 12, 1.5);
+      lanternLight.position.set(0, 3.5, 0);
+      pavGroup.add(lanternLight);
+
+      this.group.add(pavGroup);
+    });
+
+    // 9. Wooden Country Boats ('Nouka') bobbing along the pier
     this.buildCountryBoats(118, 95);
   }
 
@@ -513,15 +1093,97 @@ export class WorldTerrain {
       metalness: 0.1,
     });
 
-    // 1. Main East-West Avenue (from X = -140 to Bridge at X = 50)
-    const mainAvenueGeo = new THREE.PlaneGeometry(190, 14);
+    // 1. Main East-West Avenue (Widened to 18m: Z from -6 to +12, X from -140 to Bridge West Ramp at X = 50)
+    // Provides 2 spacious directional roadways (Eastbound and Westbound)
+    const mainAvenueGeo = new THREE.PlaneGeometry(190, 18);
     mainAvenueGeo.rotateX(-Math.PI / 2);
     const mainAvenue = new THREE.Mesh(mainAvenueGeo, roadMat);
     mainAvenue.position.set(-45, 0.03, 3);
     mainAvenue.receiveShadow = true;
     this.group.add(mainAvenue);
 
-    // 1B. Brick-Pattern Sidewalks (North & South)
+    // 1B. Straight, Continuous Central Divider with Vertical Posts (along Z = 3.0)
+    // Follows elevation, divides eastbound/westbound traffic, with clean openings at intersections & crosswalks
+    const dividerCurbMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.75 });
+    const dividerPostMat = new THREE.MeshStandardMaterial({
+      color: 0xfacc15, // Dhaka Safety Reflective Yellow
+      roughness: 0.4,
+      metalness: 0.6,
+    });
+    const postStripeMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, // White reflective band
+      roughness: 0.3,
+    });
+
+    const dividerSegments = [
+      { startX: -135, endX: -72.0 },  // Far west stretch
+      { startX: -68.0, endX: -18.0 }, // West stretch to Cross Blvd
+      { startX: -2.0, endX: 6.5 },    // Between Cross Blvd & Overbridge/Crosswalk
+      { startX: 9.5, endX: 23.5 },    // Between Crosswalk & East River Road
+      { startX: 36.5, endX: 50.0 },   // East stretch to Chinese Bridge Approach
+    ];
+
+    dividerSegments.forEach((seg) => {
+      const segLen = seg.endX - seg.startX;
+      const midX = (seg.startX + seg.endX) / 2;
+
+      // Continuous concrete median curb
+      const medianCurbGeo = new THREE.BoxGeometry(segLen, 0.24, 0.75);
+      const medianCurb = new THREE.Mesh(medianCurbGeo, dividerCurbMat);
+      medianCurb.position.set(midX, 0.12, 3.0);
+      medianCurb.castShadow = true;
+      medianCurb.receiveShadow = true;
+      this.group.add(medianCurb);
+
+      // Register collision obstacle for the central median
+      this.obstacles.push({
+        minX: seg.startX,
+        maxX: seg.endX,
+        minZ: 2.6,
+        maxZ: 3.4,
+        height: 1.0,
+      });
+
+      // Small, evenly-spaced vertical posts/pillars (bollards) mounted on the divider
+      const postSpacing = 3.5;
+      for (let px = seg.startX + 1.5; px <= seg.endX - 1.5; px += postSpacing) {
+        const postGroup = new THREE.Group();
+        postGroup.position.set(px, 0.24, 3.0);
+
+        // Vertical post shaft
+        const postShaftGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.75, 10);
+        const postShaft = new THREE.Mesh(postShaftGeo, dividerPostMat);
+        postShaft.position.y = 0.375;
+        postShaft.castShadow = true;
+        postGroup.add(postShaft);
+
+        // High-visibility reflective white collar rings
+        const ringGeo = new THREE.CylinderGeometry(0.065, 0.065, 0.14, 10);
+        const ring = new THREE.Mesh(ringGeo, postStripeMat);
+        ring.position.y = 0.55;
+        postGroup.add(ring);
+
+        this.group.add(postGroup);
+      }
+    });
+
+    // Intersection Yellow Box Junction Markings at Cross Boulevard (X = -10, Z = 3)
+    const junctionBoxGeo = new THREE.PlaneGeometry(14, 18);
+    junctionBoxGeo.rotateX(-Math.PI / 2);
+    const junctionMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1e24,
+      roughness: 0.6,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    });
+    const junctionBox = new THREE.Mesh(junctionBoxGeo, junctionMat);
+    junctionBox.position.set(-10, 0.032, 3);
+    junctionBox.receiveShadow = true;
+    this.group.add(junctionBox);
+
+    // 1C. Matching Brick-Pattern Sidewalks with Curbs on BOTH SIDES of Main Avenue
+    // Continuous sidewalks along North (Z: -11.5 to -6) and South (Z: 12 to 17.5) sides
     const brickTex = createBrickSidewalkTexture();
     const sidewalkMat = new THREE.MeshStandardMaterial({
       map: brickTex,
@@ -529,21 +1191,6 @@ export class WorldTerrain {
       metalness: 0.05,
     });
 
-    // South Sidewalk (Z = 12.5, width 5m)
-    const southWalkGeo = new THREE.BoxGeometry(190, 0.16, 5);
-    const southWalk = new THREE.Mesh(southWalkGeo, sidewalkMat);
-    southWalk.position.set(-45, 0.08, 12.5);
-    southWalk.receiveShadow = true;
-    this.group.add(southWalk);
-
-    // North Sidewalk (Z = -6.5, width 5m)
-    const northWalkGeo = new THREE.BoxGeometry(190, 0.16, 5);
-    const northWalk = new THREE.Mesh(northWalkGeo, sidewalkMat);
-    northWalk.position.set(-45, 0.08, -6.5);
-    northWalk.receiveShadow = true;
-    this.group.add(northWalk);
-
-    // 1C. Black-and-Yellow Road Curbs
     const curbTex = createCurbTexture();
     const curbMat = new THREE.MeshStandardMaterial({
       map: curbTex,
@@ -551,31 +1198,104 @@ export class WorldTerrain {
       metalness: 0.1,
     });
 
-    // South Curb (at Z = 10)
-    const southCurbGeo = new THREE.BoxGeometry(190, 0.22, 0.35);
-    const southCurb = new THREE.Mesh(southCurbGeo, curbMat);
-    southCurb.position.set(-45, 0.11, 10.15);
-    southCurb.receiveShadow = true;
-    southCurb.castShadow = true;
-    this.group.add(southCurb);
+    const sidewalkSegments = [
+      { startX: -140, endX: -17.5 }, // West of Cross Blvd
+      { startX: -2.5, endX: 23.5 },  // Between Cross Blvd & East River Rd
+      { startX: 36.5, endX: 50.0 },  // East of East River Rd to Bridge Approach
+    ];
 
-    // North Curb (at Z = -4)
-    const northCurbGeo = new THREE.BoxGeometry(190, 0.22, 0.35);
-    const northCurb = new THREE.Mesh(northCurbGeo, curbMat);
-    northCurb.position.set(-45, 0.11, -4.15);
-    northCurb.receiveShadow = true;
-    northCurb.castShadow = true;
-    this.group.add(northCurb);
+    sidewalkSegments.forEach((seg) => {
+      const segLen = seg.endX - seg.startX;
+      const midX = (seg.startX + seg.endX) / 2;
 
-    // 2. North-South Cross Boulevard (at X = -10, Z from -130 to 50)
-    const crossBlvdGeo = new THREE.PlaneGeometry(14, 180);
-    crossBlvdGeo.rotateX(-Math.PI / 2);
-    const crossBlvd = new THREE.Mesh(crossBlvdGeo, roadMat);
-    crossBlvd.position.set(-10, 0.03, -40);
-    crossBlvd.receiveShadow = true;
-    this.group.add(crossBlvd);
+      // South Sidewalk (Z = 14.75, width 5.5m)
+      const southWalkGeo = new THREE.BoxGeometry(segLen, 0.16, 5.5);
+      const southWalk = new THREE.Mesh(southWalkGeo, sidewalkMat);
+      southWalk.position.set(midX, 0.08, 14.75);
+      southWalk.receiveShadow = true;
+      this.group.add(southWalk);
 
-    // 3. Flyover Expressway (Elevated road along Z = -100 to 30 at X = -35)
+      // North Sidewalk (Z = -8.75, width 5.5m)
+      const northWalkGeo = new THREE.BoxGeometry(segLen, 0.16, 5.5);
+      const northWalk = new THREE.Mesh(northWalkGeo, sidewalkMat);
+      northWalk.position.set(midX, 0.08, -8.75);
+      northWalk.receiveShadow = true;
+      this.group.add(northWalk);
+
+      // South Curb (at Z = 12.15, height 0.22m)
+      const southCurbGeo = new THREE.BoxGeometry(segLen, 0.22, 0.35);
+      const southCurb = new THREE.Mesh(southCurbGeo, curbMat);
+      southCurb.position.set(midX, 0.11, 12.15);
+      southCurb.receiveShadow = true;
+      southCurb.castShadow = true;
+      this.group.add(southCurb);
+
+      // North Curb (at Z = -6.15, height 0.22m)
+      const northCurbGeo = new THREE.BoxGeometry(segLen, 0.22, 0.35);
+      const northCurb = new THREE.Mesh(northCurbGeo, curbMat);
+      northCurb.position.set(midX, 0.11, -6.15);
+      northCurb.receiveShadow = true;
+      northCurb.castShadow = true;
+      this.group.add(northCurb);
+    });
+
+    // Rounded Curb Corner Returns turning into Cross Streets at Intersections
+    const cornerPositions = [
+      { x: -17.5, z: 12.15, rotY: Math.PI / 2 },
+      { x: -17.5, z: -6.15, rotY: -Math.PI / 2 },
+      { x: -2.5, z: 12.15, rotY: Math.PI / 2 },
+      { x: -2.5, z: -6.15, rotY: -Math.PI / 2 },
+      { x: 23.5, z: 12.15, rotY: Math.PI / 2 },
+      { x: 23.5, z: -6.15, rotY: -Math.PI / 2 },
+      { x: 36.5, z: 12.15, rotY: Math.PI / 2 },
+      { x: 36.5, z: -6.15, rotY: -Math.PI / 2 },
+    ];
+    cornerPositions.forEach((cp) => {
+      const cornerGeo = new THREE.BoxGeometry(0.35, 0.22, 2.0);
+      const corner = new THREE.Mesh(cornerGeo, curbMat);
+      corner.position.set(cp.x, 0.11, cp.z + (cp.z > 0 ? 1.0 : -1.0));
+      corner.receiveShadow = true;
+      this.group.add(corner);
+    });
+
+    // 2. North-South Cross Boulevard (at X = -10, width 14m: X from -17 to -3)
+    // Non-overlapping segments that cleanly meet the widened 18m Main Avenue without z-fighting!
+    // North Segment: Z from -130 to -6.0 (length 124m)
+    const crossBlvdNorthGeo = new THREE.PlaneGeometry(14, 124);
+    crossBlvdNorthGeo.rotateX(-Math.PI / 2);
+    const crossBlvdNorth = new THREE.Mesh(crossBlvdNorthGeo, roadMat);
+    crossBlvdNorth.position.set(-10, 0.03, -68);
+    crossBlvdNorth.receiveShadow = true;
+    this.group.add(crossBlvdNorth);
+
+    // South Segment: Z from 12.0 to 50.0 (length 38m)
+    const crossBlvdSouthGeo = new THREE.PlaneGeometry(14, 38);
+    crossBlvdSouthGeo.rotateX(-Math.PI / 2);
+    const crossBlvdSouth = new THREE.Mesh(crossBlvdSouthGeo, roadMat);
+    crossBlvdSouth.position.set(-10, 0.03, 31);
+    crossBlvdSouth.receiveShadow = true;
+    this.group.add(crossBlvdSouth);
+
+    // Matching Brick Sidewalks along Cross Boulevard (West side at X = -19.25, East side at X = -0.75)
+    // North section (Z: -130 to -8.75)
+    [-19.25, -0.75].forEach((swX) => {
+      const walkGeo = new THREE.BoxGeometry(4.5, 0.16, 121.25);
+      const walk = new THREE.Mesh(walkGeo, sidewalkMat);
+      walk.position.set(swX, 0.08, -69.375);
+      walk.receiveShadow = true;
+      this.group.add(walk);
+    });
+    // South section (Z: 14.75 to 50)
+    [-19.25, -0.75].forEach((swX) => {
+      const walkGeo = new THREE.BoxGeometry(4.5, 0.16, 35.25);
+      const walk = new THREE.Mesh(walkGeo, sidewalkMat);
+      walk.position.set(swX, 0.08, 32.375);
+      walk.receiveShadow = true;
+      this.group.add(walk);
+    });
+
+    // 3. City Flyover Expressway (Elevated road along Z = -100 to 30 at X = -35, deck Y = 7.5)
+    // Clear underpass clearance for lower road (Main East-West Avenue at Z = 3)
     const flyoverGeo = new THREE.BoxGeometry(10, 0.8, 130);
     const concreteMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.8 });
     const flyover = new THREE.Mesh(flyoverGeo, concreteMat);
@@ -584,7 +1304,7 @@ export class WorldTerrain {
     flyover.receiveShadow = true;
     this.group.add(flyover);
 
-    // Flyover Concrete Guardrails (with safety markers)
+    // Flyover Concrete Guardrails (Elevated ONLY: minY = 6.8, maxY = 9.5)
     [-1, 1].forEach((sideX) => {
       const railGeo = new THREE.BoxGeometry(0.35, 1.1, 130);
       const rail = new THREE.Mesh(railGeo, curbMat);
@@ -598,11 +1318,14 @@ export class WorldTerrain {
         minZ: -100,
         maxZ: 30,
         height: 9.0,
+        minY: 6.8,
+        maxY: 9.5,
       });
     });
 
-    // Flyover Support Pillars
-    for (let pz = -90; pz <= 20; pz += 25) {
+    // Flyover Support Pillars & Underpass Portal Frames
+    const pillarZPositions = [-90, -65, -40, -17, 23];
+    pillarZPositions.forEach((pz) => {
       const pillarGeo = new THREE.CylinderGeometry(1.2, 1.2, 7.5, 12);
       const pillar = new THREE.Mesh(pillarGeo, concreteMat);
       pillar.position.set(-35, 3.75, pz);
@@ -615,17 +1338,33 @@ export class WorldTerrain {
         minZ: pz - 1.5,
         maxZ: pz + 1.5,
         height: 7.5,
+        minY: 0.0,
+        maxY: 7.5,
       });
-    }
+    });
 
-    // 4. Commercial & Apartment Buildings with Bengali Shopfronts
+    // Overhead Underpass Portal Clearance Beams (Framing the lower avenue at Z = -17 and Z = 23)
+    [-17, 23].forEach((portalZ) => {
+      const portalBeamGeo = new THREE.BoxGeometry(11.0, 0.7, 1.2);
+      const portalBeam = new THREE.Mesh(portalBeamGeo, curbMat);
+      portalBeam.position.set(-35, 7.15, portalZ);
+      portalBeam.castShadow = true;
+      this.group.add(portalBeam);
+    });
+
+    // 4. Pedestrian Foot-Overbridge across Main Avenue with Staircases at Both Ends
+    this.buildPedestrianOverbridge();
+
+    // 5. Commercial & Apartment Buildings with Bengali Shopfronts
+    // All obstructing buildings relocated sideways to dedicated vacant parcels beside roads.
+    // Orientations configured so front facades face directly toward their respective street.
     const buildingsData = [
-      // Dhanmondi Cha Stall & Shopping Row (Near Player Spawn)
+      // South Shopping Row (Facing North toward Main East-West Avenue at Z = 3)
       {
-        x: 14,
-        z: 22,
-        w: 16,
-        d: 12,
+        x: 11,
+        z: 25,
+        w: 14,
+        d: 11,
         h: 22,
         color: 0xd97706,
         shopTitle: 'ঢাকা চা স্টল ও স্নাক্স',
@@ -636,10 +1375,11 @@ export class WorldTerrain {
         awningC2: '#fef08a',
       },
       {
-        x: -14,
-        z: 22,
-        w: 18,
-        d: 12,
+        // Relocated away from Cross Boulevard (was X = -14, now X = -27)
+        x: -27,
+        z: 25,
+        w: 13,
+        d: 11,
         h: 28,
         color: 0x0284c7,
         shopTitle: 'স্মার্ট ইলেকট্রনিক্স',
@@ -650,10 +1390,11 @@ export class WorldTerrain {
         awningC2: '#ffffff',
       },
       {
-        x: -42,
-        z: 22,
-        w: 20,
-        d: 14,
+        // Relocated away from Flyover corridor (was X = -42, now X = -65)
+        x: -65,
+        z: 26,
+        w: 18,
+        d: 13,
         h: 34,
         color: 0x475569,
         shopTitle: 'সোনার বাংলা সুপারমার্কেট',
@@ -663,12 +1404,27 @@ export class WorldTerrain {
         awningC1: '#15803d',
         awningC2: '#fbbf24',
       },
-      // North Commercial Towers
       {
-        x: 14,
-        z: -18,
-        w: 16,
-        d: 14,
+        x: -105,
+        z: 26,
+        w: 20,
+        d: 13,
+        h: 36,
+        color: 0x1e293b,
+        shopTitle: 'রূপসী বাংলা ফ্যাশন হাউস',
+        sub: 'RUPOSHI BANGLA FASHION & BOUTIQUE',
+        theme: '#9333ea',
+        accent: '#f3e8ff',
+        awningC1: '#9333ea',
+        awningC2: '#fef08a',
+      },
+
+      // North Commercial Row (Facing South toward Main East-West Avenue at Z = 3)
+      {
+        x: 11,
+        z: -21,
+        w: 14,
+        d: 11,
         h: 36,
         color: 0x334155,
         shopTitle: 'ফার্মেসি ও ডায়াগনস্টিক',
@@ -679,11 +1435,12 @@ export class WorldTerrain {
         awningC2: '#ffffff',
       },
       {
-        x: -14,
-        z: -18,
-        w: 18,
-        d: 14,
-        h: 42,
+        // Relocated away from Cross Boulevard (was X = -14, now X = -27)
+        x: -27,
+        z: -21,
+        w: 13,
+        d: 11,
+        h: 38,
         color: 0x1e293b,
         shopTitle: 'বাংলা ক্রাফট ও বস্ত্রমেলা',
         sub: 'TRADITIONAL SILK & TEXTILES',
@@ -694,9 +1451,9 @@ export class WorldTerrain {
       },
       {
         x: -65,
-        z: -18,
-        w: 22,
-        d: 16,
+        z: -21,
+        w: 18,
+        d: 13,
         h: 48,
         color: 0x1e293b,
         shopTitle: 'প্রাইম ব্যাংক টাওয়ার',
@@ -706,12 +1463,28 @@ export class WorldTerrain {
         awningC1: '#0f766e',
         awningC2: '#ffffff',
       },
-      // Expanded 4-Direction Grid: North Commercial Plaza
       {
-        x: -42,
-        z: -68,
-        w: 22,
-        d: 16,
+        x: -105,
+        z: -21,
+        w: 20,
+        d: 13,
+        h: 40,
+        color: 0x0f766e,
+        shopTitle: 'মেঘনা সুপারস্টোর',
+        sub: 'MEGHNA SUPERSTORE & BAZAAR',
+        theme: '#047857',
+        accent: '#a7f3d0',
+        awningC1: '#047857',
+        awningC2: '#ffffff',
+      },
+
+      // North Commercial Plaza (Facing South toward North Avenue at Z = -50)
+      {
+        // Relocated away from Flyover (was X = -42, now X = -65)
+        x: -65,
+        z: -72,
+        w: 20,
+        d: 15,
         h: 44,
         color: 0x0f172a,
         shopTitle: 'গুলশান গ্র্যান্ড হোটেল ও রেস্তোরাঁ',
@@ -722,9 +1495,9 @@ export class WorldTerrain {
         awningC2: '#fde047',
       },
       {
-        x: 10,
-        z: -68,
-        w: 18,
+        x: 11,
+        z: -72,
+        w: 16,
         d: 14,
         h: 38,
         color: 0x1e1e24,
@@ -735,12 +1508,13 @@ export class WorldTerrain {
         awningC1: '#065f46',
         awningC2: '#ffffff',
       },
-      // Expanded 4-Direction Grid: South Waterfront Avenue
+
+      // South Waterfront Avenue (Facing North toward South Avenue at Z = 35)
       {
-        x: -42,
-        z: 48,
+        x: -65,
+        z: 62,
         w: 20,
-        d: 15,
+        d: 14,
         h: 32,
         color: 0x334155,
         shopTitle: 'পদ্মা টেলিকম ও আইটি হাব',
@@ -751,10 +1525,10 @@ export class WorldTerrain {
         awningC2: '#ffffff',
       },
       {
-        x: 12,
-        z: 48,
-        w: 16,
-        d: 14,
+        x: 11,
+        z: 62,
+        w: 15,
+        d: 13,
         h: 30,
         color: 0xd97706,
         shopTitle: 'সুরমা মিষ্টি ভাণ্ডার',
@@ -763,35 +1537,6 @@ export class WorldTerrain {
         accent: '#fef08a',
         awningC1: '#ea580c',
         awningC2: '#fef08a',
-      },
-      // Expanded 4-Direction Grid: Westward Boulevard
-      {
-        x: -110,
-        z: 22,
-        w: 22,
-        d: 15,
-        h: 36,
-        color: 0x1e293b,
-        shopTitle: 'রূপসী বাংলা ফ্যাশন হাউস',
-        sub: 'RUPOSHI BANGLA FASHION & BOUTIQUE',
-        theme: '#9333ea',
-        accent: '#f3e8ff',
-        awningC1: '#9333ea',
-        awningC2: '#fef08a',
-      },
-      {
-        x: -110,
-        z: -18,
-        w: 22,
-        d: 16,
-        h: 40,
-        color: 0x0f766e,
-        shopTitle: 'মেঘনা সুপারস্টোর',
-        sub: 'MEGHNA SUPERSTORE & BAZAAR',
-        theme: '#047857',
-        accent: '#a7f3d0',
-        awningC1: '#047857',
-        awningC2: '#ffffff',
       },
     ];
 
@@ -812,39 +1557,85 @@ export class WorldTerrain {
       );
     }
 
-    // 5. Intersecting Secondary Grid Roads (North Ave, South Ave, Riverfront Ave)
-    const northAveGeo = new THREE.PlaneGeometry(160, 11);
-    northAveGeo.rotateX(-Math.PI / 2);
-    const northAve = new THREE.Mesh(northAveGeo, roadMat);
-    northAve.position.set(-45, 0.03, -50);
-    northAve.receiveShadow = true;
-    this.group.add(northAve);
+    // 6. Intersecting Secondary Grid Roads (North Ave, South Ave, East River Road)
+    // North Avenue (at Z = -50, width 11m) - segmented at Cross Blvd (X: -17.5 to -2.5)
+    const northAveWestGeo = new THREE.PlaneGeometry(108, 11);
+    northAveWestGeo.rotateX(-Math.PI / 2);
+    const northAveWest = new THREE.Mesh(northAveWestGeo, roadMat);
+    northAveWest.position.set(-71.5, 0.03, -50);
+    northAveWest.receiveShadow = true;
+    this.group.add(northAveWest);
 
-    const southAveGeo = new THREE.PlaneGeometry(160, 11);
-    southAveGeo.rotateX(-Math.PI / 2);
-    const southAve = new THREE.Mesh(southAveGeo, roadMat);
-    southAve.position.set(-45, 0.03, 35);
-    southAve.receiveShadow = true;
-    this.group.add(southAve);
+    const northAveEastGeo = new THREE.PlaneGeometry(38, 11);
+    northAveEastGeo.rotateX(-Math.PI / 2);
+    const northAveEast = new THREE.Mesh(northAveEastGeo, roadMat);
+    northAveEast.position.set(16.5, 0.03, -50);
+    northAveEast.receiveShadow = true;
+    this.group.add(northAveEast);
 
-    const eastRiverRoadGeo = new THREE.PlaneGeometry(12, 110);
-    eastRiverRoadGeo.rotateX(-Math.PI / 2);
-    const eastRiverRoad = new THREE.Mesh(eastRiverRoadGeo, roadMat);
-    eastRiverRoad.position.set(30, 0.03, -8);
-    eastRiverRoad.receiveShadow = true;
-    this.group.add(eastRiverRoad);
+    // South Avenue (at Z = 35, width 11m) - segmented at Cross Blvd (X: -17.5 to -2.5)
+    const southAveWestGeo = new THREE.PlaneGeometry(108, 11);
+    southAveWestGeo.rotateX(-Math.PI / 2);
+    const southAveWest = new THREE.Mesh(southAveWestGeo, roadMat);
+    southAveWest.position.set(-71.5, 0.03, 35);
+    southAveWest.receiveShadow = true;
+    this.group.add(southAveWest);
 
-    // Street Lamps along Main Avenue & Grid
-    for (let lx = -130; lx <= 40; lx += 25) {
-      this.buildStreetLamp(lx, 10.5);
-      this.buildStreetLamp(lx, -4.5);
-    }
+    const southAveEastGeo = new THREE.PlaneGeometry(38, 11);
+    southAveEastGeo.rotateX(-Math.PI / 2);
+    const southAveEast = new THREE.Mesh(southAveEastGeo, roadMat);
+    southAveEast.position.set(16.5, 0.03, 35);
+    southAveEast.receiveShadow = true;
+    this.group.add(southAveEast);
+
+    // East River Road (at X = 30, width 12m) - segmented at Main Avenue (Z: -6 to 12)
+    // North Segment: Z from -63 to -6.0 (length 57m)
+    const eastRiverNorthGeo = new THREE.PlaneGeometry(12, 57);
+    eastRiverNorthGeo.rotateX(-Math.PI / 2);
+    const eastRiverNorth = new THREE.Mesh(eastRiverNorthGeo, roadMat);
+    eastRiverNorth.position.set(30, 0.03, -34.5);
+    eastRiverNorth.receiveShadow = true;
+    this.group.add(eastRiverNorth);
+
+    // South Segment: Z from 12.0 to 47.0 (length 35m)
+    const eastRiverSouthGeo = new THREE.PlaneGeometry(12, 35);
+    eastRiverSouthGeo.rotateX(-Math.PI / 2);
+    const eastRiverSouth = new THREE.Mesh(eastRiverSouthGeo, roadMat);
+    eastRiverSouth.position.set(30, 0.03, 29.5);
+    eastRiverSouth.receiveShadow = true;
+    this.group.add(eastRiverSouth);
+
+    // Matching Brick Sidewalks along East River Road (West side at X = 21.75, East side at X = 38.25)
+    [-1, 1].forEach((dir) => {
+      const swX = 30 + dir * 8.25;
+      // North sidewalk
+      const nWalkGeo = new THREE.BoxGeometry(4.5, 0.16, 54.25);
+      const nWalk = new THREE.Mesh(nWalkGeo, sidewalkMat);
+      nWalk.position.set(swX, 0.08, -35.875);
+      nWalk.receiveShadow = true;
+      this.group.add(nWalk);
+
+      // South sidewalk
+      const sWalkGeo = new THREE.BoxGeometry(4.5, 0.16, 32.25);
+      const sWalk = new THREE.Mesh(sWalkGeo, sidewalkMat);
+      sWalk.position.set(swX, 0.08, 30.875);
+      sWalk.receiveShadow = true;
+      this.group.add(sWalk);
+    });
+
+    // Street Lamps along Main Avenue Sidewalks
+    const lampPositionsX = [-130, -105, -80, -55, -30, 18, 42];
+    lampPositionsX.forEach((lx) => {
+      this.buildStreetLamp(lx, 12.5);
+      this.buildStreetLamp(lx, -6.5);
+    });
 
     // Roadside Planter Trees along sidewalks
-    for (let tx = -120; tx <= 35; tx += 20) {
-      this.buildRoadsideTree(tx, 14.5);
-      this.buildRoadsideTree(tx, -8.5);
-    }
+    const treePositionsX = [-120, -95, -70, -45, 24, 45];
+    treePositionsX.forEach((tx) => {
+      this.buildRoadsideTree(tx, 15.8);
+      this.buildRoadsideTree(tx, -9.8);
+    });
 
     // Stationed Colorful Bangladeshi City Bus ("ঢাকা চাকা মেট্রো স্পেশাল")
     this.buildCityBus(-60, 5.5);
@@ -964,6 +1755,265 @@ export class WorldTerrain {
     });
   }
 
+  /**
+   * Modern Urban Pedestrian Foot-Overbridge across Dhanmondi City Avenue
+   * Spans across the widened 18m avenue at X = 0, connecting North Sidewalk (Z = -8.8) to South Sidewalk (Z = 14.8)
+   * Deck elevation Y = 5.2 (Clearance = 5.0m above lower avenue roadway).
+   * Features individual-step connected staircases at BOTH ends down to the sidewalk with visible stairs,
+   * tubular stringers, stainless steel handrails, translucent protective canopy roof, and clearance hazard striping.
+   */
+  private buildPedestrianOverbridge() {
+    const bridgeGroup = new THREE.Group();
+    bridgeGroup.name = 'PedestrianOverbridge';
+
+    // Materials
+    const steelGirderMat = new THREE.MeshStandardMaterial({
+      color: 0x334155, // Charcoal/Slate structural steel
+      roughness: 0.4,
+      metalness: 0.8,
+    });
+    const antiSlipFloorMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.8,
+      metalness: 0.3,
+    });
+    const stairTreadMat = new THREE.MeshStandardMaterial({
+      color: 0x475569, // Anti-slip ribbed steel tread
+      roughness: 0.6,
+      metalness: 0.5,
+    });
+    const handrailMat = new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0, // Brushed stainless steel
+      roughness: 0.2,
+      metalness: 0.9,
+    });
+    const glassCanopyMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      roughness: 0.1,
+      metalness: 0.4,
+      transparent: true,
+      opacity: 0.65,
+    });
+    const hazardMat = createCurbTexture(); // Yellow and black hazard clearance markings
+
+    const spanLength = 23.6; // from Z = -8.8 to 14.8
+    const deckWidth = 3.2;   // from X = -1.6 to +1.6
+    const deckY = 5.2;
+
+    // 1. Main Walkway Box Girder Deck
+    const deckGeo = new THREE.BoxGeometry(deckWidth, 0.4, spanLength);
+    const deck = new THREE.Mesh(deckGeo, antiSlipFloorMat);
+    deck.position.set(0, deckY - 0.2, 3.0);
+    deck.castShadow = true;
+    deck.receiveShadow = true;
+    bridgeGroup.add(deck);
+
+    // Hazard clearance warning stripe on girder bottom soffit
+    const hazardGeo = new THREE.PlaneGeometry(deckWidth, spanLength);
+    hazardGeo.rotateX(Math.PI / 2);
+    const hazardStrip = new THREE.Mesh(
+      hazardGeo,
+      new THREE.MeshStandardMaterial({ map: hazardMat, roughness: 0.5 }),
+    );
+    hazardStrip.position.set(0, deckY - 0.41, 3.0);
+    bridgeGroup.add(hazardStrip);
+
+    // Steel Edge Fascia Trusses
+    [-1, 1].forEach((sideX) => {
+      const trussGeo = new THREE.BoxGeometry(0.2, 0.7, spanLength);
+      const truss = new THREE.Mesh(trussGeo, steelGirderMat);
+      truss.position.set(sideX * 1.6, deckY - 0.15, 3.0);
+      truss.castShadow = true;
+      bridgeGroup.add(truss);
+    });
+
+    // 2. Tubular Support Columns grounded in sidewalk curb line
+    // North column at Z = -6.2, South column at Z = 12.2 (Height = 5.2m, clears road lanes completely)
+    [-6.2, 12.2].forEach((colZ) => {
+      const colGroup = new THREE.Group();
+      colGroup.position.set(0, 0, colZ);
+
+      // Concrete plinth foundation base
+      const baseGeo = new THREE.CylinderGeometry(0.55, 0.65, 0.4, 12);
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.9 });
+      const base = new THREE.Mesh(baseGeo, baseMat);
+      base.position.y = 0.2;
+      colGroup.add(base);
+
+      // Heavy steel portal column
+      const colGeo = new THREE.CylinderGeometry(0.35, 0.35, deckY - 0.4, 16);
+      const col = new THREE.Mesh(colGeo, steelGirderMat);
+      col.position.y = (deckY - 0.4) / 2 + 0.2;
+      col.castShadow = true;
+      colGroup.add(col);
+
+      bridgeGroup.add(colGroup);
+
+      // Collider for column base
+      this.obstacles.push({
+        minX: -0.6,
+        maxX: 0.6,
+        minZ: colZ - 0.6,
+        maxZ: colZ + 0.6,
+        height: 6.0,
+      });
+    });
+
+    // 3. Stainless Steel Deck Handrails & Safety Panels
+    [-1, 1].forEach((sideX) => {
+      const railX = sideX * 1.5;
+
+      // Top handrail
+      const handrailGeo = new THREE.BoxGeometry(0.08, 0.08, spanLength);
+      const handrail = new THREE.Mesh(handrailGeo, handrailMat);
+      handrail.position.set(railX, deckY + 1.1, 3.0);
+      bridgeGroup.add(handrail);
+
+      // Mid rail
+      const midRail = new THREE.Mesh(handrailGeo, handrailMat);
+      midRail.position.set(railX, deckY + 0.55, 3.0);
+      bridgeGroup.add(midRail);
+
+      // Vertical stanchions
+      for (let z = -8.0; z <= 14.0; z += 2.0) {
+        const stanchionGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.1, 8);
+        const stanchion = new THREE.Mesh(stanchionGeo, steelGirderMat);
+        stanchion.position.set(railX, deckY + 0.55, z);
+        bridgeGroup.add(stanchion);
+      }
+
+      // Deck safety boundary collider
+      this.obstacles.push({
+        minX: railX - 0.2,
+        maxX: railX + 0.2,
+        minZ: -8.8,
+        maxZ: 14.8,
+        height: 7.0,
+        minY: 4.5,
+        maxY: 7.5,
+      });
+    });
+
+    // 4. Modern Curved Canopy Roof with Polycarbonate Sky Panels
+    const archCount = 12;
+    for (let i = 0; i <= archCount; i++) {
+      const az = -8.8 + (i / archCount) * spanLength;
+      const archGeo = new THREE.TorusGeometry(1.8, 0.05, 8, 16, Math.PI);
+      archGeo.rotateZ(Math.PI / 2);
+      archGeo.rotateY(Math.PI / 2);
+      const arch = new THREE.Mesh(archGeo, steelGirderMat);
+      arch.position.set(0, deckY + 1.2, az);
+      bridgeGroup.add(arch);
+    }
+
+    // Canopy translucent curved roof skin
+    const roofGeo = new THREE.CylinderGeometry(1.82, 1.82, spanLength, 16, 1, true, 0, Math.PI);
+    roofGeo.rotateZ(Math.PI / 2);
+    roofGeo.rotateY(Math.PI / 2);
+    const roof = new THREE.Mesh(roofGeo, glassCanopyMat);
+    roof.position.set(0, deckY + 1.2, 3.0);
+    bridgeGroup.add(roof);
+
+    // 5. Individual-Step Connected Staircases at BOTH Ends Down to Sidewalk
+    const buildStairs = (landingZ: number) => {
+      const stepCount = 16;
+      const stairLength = 8.5; // X from 0.0 to 8.5
+      const totalRise = deckY - 0.16; // 5.04m
+      const stepRise = totalRise / stepCount; // 0.315m
+      const stepRun = stairLength / stepCount; // 0.53m
+      const stairWidth = 2.4;
+
+      // Landing Platform at top (at X = 0, Y = deckY)
+      const topPlatformGeo = new THREE.BoxGeometry(3.2, 0.3, 3.2);
+      const topPlatform = new THREE.Mesh(topPlatformGeo, antiSlipFloorMat);
+      topPlatform.position.set(0, deckY - 0.15, landingZ);
+      topPlatform.castShadow = true;
+      topPlatform.receiveShadow = true;
+      bridgeGroup.add(topPlatform);
+
+      // Sloped Steel Stringers on both sides of staircase
+      [-stairWidth / 2, stairWidth / 2].forEach((offsetZ) => {
+        const stringerLen = Math.sqrt(stairLength * stairLength + totalRise * totalRise);
+        const stringerGeo = new THREE.BoxGeometry(stringerLen, 0.25, 0.1);
+        const stringer = new THREE.Mesh(stringerGeo, steelGirderMat);
+        const angle = Math.atan2(totalRise, stairLength);
+        stringer.rotation.z = angle;
+        stringer.position.set(stairLength / 2, deckY - totalRise / 2 - 0.2, landingZ + offsetZ);
+        stringer.castShadow = true;
+        bridgeGroup.add(stringer);
+
+        // Handrail above stringer
+        const railGeo = new THREE.BoxGeometry(stringerLen, 0.06, 0.06);
+        const rail = new THREE.Mesh(railGeo, handrailMat);
+        rail.rotation.z = angle;
+        rail.position.set(stairLength / 2, deckY - totalRise / 2 + 0.85, landingZ + offsetZ);
+        bridgeGroup.add(rail);
+      });
+
+      // 16 Individual Visible Steps with treads and risers
+      for (let s = 0; s < stepCount; s++) {
+        const stepX = (s + 0.5) * stepRun;
+        const stepY = deckY - (s + 1) * stepRise;
+
+        // Individual Step Tread
+        const treadGeo = new THREE.BoxGeometry(stepRun * 1.05, 0.08, stairWidth);
+        const tread = new THREE.Mesh(treadGeo, stairTreadMat);
+        tread.position.set(stepX, stepY + stepRise, landingZ);
+        tread.castShadow = true;
+        tread.receiveShadow = true;
+        bridgeGroup.add(tread);
+
+        // Individual Step Riser
+        const riserGeo = new THREE.BoxGeometry(0.04, stepRise, stairWidth);
+        const riser = new THREE.Mesh(riserGeo, steelGirderMat);
+        riser.position.set(stepX - stepRun * 0.45, stepY + stepRise / 2, landingZ);
+        bridgeGroup.add(riser);
+
+        // Vertical handrail balusters every 2 steps
+        if (s % 2 === 0) {
+          [-stairWidth / 2, stairWidth / 2].forEach((offsetZ) => {
+            const balusterGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.9, 6);
+            const baluster = new THREE.Mesh(balusterGeo, steelGirderMat);
+            baluster.position.set(stepX, stepY + stepRise + 0.45, landingZ + offsetZ);
+            bridgeGroup.add(baluster);
+          });
+        }
+      }
+
+      // Bottom Entrance Gateway Post on Sidewalk
+      [-stairWidth / 2, stairWidth / 2].forEach((offsetZ) => {
+        const postGeo = new THREE.CylinderGeometry(0.06, 0.08, 1.2, 8);
+        const post = new THREE.Mesh(postGeo, steelGirderMat);
+        post.position.set(stairLength, 0.7, landingZ + offsetZ);
+        bridgeGroup.add(post);
+      });
+
+      // Obstacle collision for stair sides
+      this.obstacles.push({
+        minX: 0,
+        maxX: stairLength,
+        minZ: landingZ - stairWidth / 2 - 0.3,
+        maxZ: landingZ - stairWidth / 2 + 0.1,
+        height: deckY + 1.5,
+      });
+      this.obstacles.push({
+        minX: 0,
+        maxX: stairLength,
+        minZ: landingZ + stairWidth / 2 - 0.1,
+        maxZ: landingZ + stairWidth / 2 + 0.3,
+        height: deckY + 1.5,
+      });
+    };
+
+    // South End Staircase (on South sidewalk Z = 14.8)
+    buildStairs(14.8);
+
+    // North End Staircase (on North sidewalk Z = -8.8)
+    buildStairs(-8.8);
+
+    this.group.add(bridgeGroup);
+  }
+
   private buildSkyscraper(
     x: number,
     z: number,
@@ -981,7 +2031,7 @@ export class WorldTerrain {
     const buildingGroup = new THREE.Group();
     buildingGroup.position.set(x, 0, z);
 
-    // Main Tower
+    // Main Tower with realistic concrete/plaster material
     const towerGeo = new THREE.BoxGeometry(w, h, d);
     const towerMat = new THREE.MeshStandardMaterial({
       color,
@@ -994,42 +2044,108 @@ export class WorldTerrain {
     tower.receiveShadow = true;
     buildingGroup.add(tower);
 
-    // Balconies on Upper Floors
+    // Architectural Facade Orientation: front faces the street
+    const frontFacing = z > 0 ? -1 : 1;
+    const facadeZ = (frontFacing * d) / 2;
+
+    // 1. Decorative Parapet Roof Cornice Trim
+    const corniceGeo = new THREE.BoxGeometry(w + 0.6, 0.5, d + 0.6);
+    const corniceMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.7 });
+    const cornice = new THREE.Mesh(corniceGeo, corniceMat);
+    cornice.position.y = h + 0.25;
+    cornice.castShadow = true;
+    buildingGroup.add(cornice);
+
+    // 2. Balconies on Upper Floors with Extruded Concrete Slabs & Metal Railings
     const balconyMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.5, metalness: 0.4 });
     const railingMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.3, metalness: 0.8 });
-    const frontFacing = z > 0 ? -1 : 1;
-    const balconyZ = (frontFacing * d) / 2 + frontFacing * 0.7;
+    const balconyZ = facadeZ + frontFacing * 0.7;
 
-    for (let floor = 7; floor < h - 4; floor += 4.5) {
+    for (let floor = 8; floor < h - 4; floor += 4.5) {
       [-w * 0.25, w * 0.25].forEach((bx) => {
         // Balcony slab
-        const slab = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.25, 1.4), balconyMat);
+        const slab = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.28, 1.4), balconyMat);
         slab.position.set(bx, floor, balconyZ);
         slab.castShadow = true;
         buildingGroup.add(slab);
 
         // Railing
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.8, 0.1), railingMat);
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.85, 0.1), railingMat);
         rail.position.set(bx, floor + 0.45, balconyZ + frontFacing * 0.65);
         buildingGroup.add(rail);
+
+        // AC Outdoor Unit mounted below balcony (Iconic Bangladeshi urban detail)
+        const acGeo = new THREE.BoxGeometry(0.85, 0.55, 0.45);
+        const acMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.4 });
+        const acUnit = new THREE.Mesh(acGeo, acMat);
+        acUnit.position.set(bx - 1.2, floor - 0.7, facadeZ + frontFacing * 0.3);
+        acUnit.castShadow = true;
+        buildingGroup.add(acUnit);
+      });
+
+      // Recessed Windows with Concrete Sills
+      [-w * 0.25, w * 0.25].forEach((wx) => {
+        const windowGeo = new THREE.BoxGeometry(2.4, 1.8, 0.1);
+        const windowMat = new THREE.MeshStandardMaterial({
+          color: 0x0f172a,
+          roughness: 0.1,
+          metalness: 0.9,
+        });
+        const win = new THREE.Mesh(windowGeo, windowMat);
+        win.position.set(wx, floor + 1.6, facadeZ + frontFacing * 0.05);
+        buildingGroup.add(win);
+
+        // Concrete Sill
+        const sillGeo = new THREE.BoxGeometry(2.6, 0.12, 0.3);
+        const sill = new THREE.Mesh(sillGeo, corniceMat);
+        sill.position.set(wx, floor + 0.65, facadeZ + frontFacing * 0.15);
+        buildingGroup.add(sill);
       });
     }
 
-    // Rooftop Water Tank (Iconic Bangladeshi urban roof detail)
+    // 3. 3D Entrance Portal Door Recess (Walk-in shop entrance)
+    const doorFrameGeo = new THREE.BoxGeometry(3.6, 3.8, 0.6);
+    const doorFrameMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 });
+    const doorFrame = new THREE.Mesh(doorFrameGeo, doorFrameMat);
+    doorFrame.position.set(0, 1.9, facadeZ + frontFacing * 0.2);
+    doorFrame.castShadow = true;
+    buildingGroup.add(doorFrame);
+
+    // Double Glass Doors
+    const doorGlassMat = new THREE.MeshStandardMaterial({
+      color: 0x0284c7,
+      roughness: 0.1,
+      metalness: 0.8,
+      transparent: true,
+      opacity: 0.7,
+    });
+    const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(3.0, 3.2, 0.08), doorGlassMat);
+    doorMesh.position.set(0, 1.8, facadeZ + frontFacing * 0.22);
+    buildingGroup.add(doorMesh);
+
+    // Granite Entrance Doorstep Slab connecting to sidewalk
+    const stepGeo = new THREE.BoxGeometry(4.2, 0.16, 1.2);
+    const stepMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.85 });
+    const step = new THREE.Mesh(stepGeo, stepMat);
+    step.position.set(0, 0.08, facadeZ + frontFacing * 0.7);
+    step.receiveShadow = true;
+    buildingGroup.add(step);
+
+    // 4. Rooftop Water Tank (Iconic Bangladeshi urban roof detail)
     const tankGeo = new THREE.CylinderGeometry(1.6, 1.6, 2.8, 12);
     const tankMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.5 });
     const tank = new THREE.Mesh(tankGeo, tankMat);
     tank.position.set(w * 0.25, h + 1.4, d * 0.25);
     buildingGroup.add(tank);
 
-    // Rooftop Communication Antenna
+    // 5. Rooftop Communication Antenna
     const antGeo = new THREE.CylinderGeometry(0.06, 0.1, 5.5, 6);
     const antMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.9, roughness: 0.2 });
     const antenna = new THREE.Mesh(antGeo, antMat);
     antenna.position.set(-w * 0.25, h + 2.75, -d * 0.25);
     buildingGroup.add(antenna);
 
-    // Ground Floor Bengali Shopfront Billboard
+    // 6. Ground Floor Bengali Shopfront Signboard
     const shopTex = createShopfrontTexture(shopTitle, sub, theme, accent);
     const shopGeo = new THREE.PlaneGeometry(w * 0.9, 4.5);
     const shopMat = new THREE.MeshStandardMaterial({
@@ -1039,9 +2155,9 @@ export class WorldTerrain {
     });
     const shopSign = new THREE.Mesh(shopGeo, shopMat);
 
-    // Sloped Fabric Shop Awning
+    // Sloped Fabric Shop Awning with Scalloped Edge
     const awningTex = createAwningTexture(awningC1, awningC2);
-    const awningGeo = new THREE.PlaneGeometry(w * 0.85, 2.2);
+    const awningGeo = new THREE.PlaneGeometry(w * 0.85, 2.4);
     const awningMat = new THREE.MeshStandardMaterial({
       map: awningTex,
       roughness: 0.8,
@@ -1049,17 +2165,17 @@ export class WorldTerrain {
     });
     const awning = new THREE.Mesh(awningGeo, awningMat);
 
-    // Face the street (+z or -z based on location)
+    // Orient toward street (+Z or -Z depending on location)
     if (z > 0) {
       shopSign.position.set(0, 2.6, -d / 2 - 0.05);
       shopSign.rotation.y = Math.PI;
 
-      awning.position.set(0, 2.2, -d / 2 - 1.0);
+      awning.position.set(0, 2.2, -d / 2 - 1.1);
       awning.rotation.x = Math.PI * 0.35;
     } else {
       shopSign.position.set(0, 2.6, d / 2 + 0.05);
 
-      awning.position.set(0, 2.2, d / 2 + 1.0);
+      awning.position.set(0, 2.2, d / 2 + 1.1);
       awning.rotation.x = -Math.PI * 0.35;
     }
     buildingGroup.add(shopSign);
@@ -1369,14 +2485,20 @@ export class WorldTerrain {
     }
 
     if (this.riverMesh) {
-      this.riverMesh.position.y = -0.4 + Math.sin(this.riverTexOffset * 2) * 0.05;
+      this.riverMesh.position.y = -0.4 + Math.sin(this.riverTexOffset * 2.5) * 0.035;
+    }
+
+    if (this.riverWaterTex) {
+      this.riverWaterTex.offset.y -= delta * 0.08;
+      this.riverWaterTex.offset.x = Math.sin(this.riverTexOffset * 1.5) * 0.02;
     }
   }
 
   /**
    * Collision check against all registered solid obstacles
+   * Supports vertical elevation bounds (minY, maxY) so elevated structures don't block ground traffic
    */
-  public checkObstacleCollision(x: number, z: number, radius = 0.5): boolean {
+  public checkObstacleCollision(x: number, z: number, radius = 0.5, y?: number): boolean {
     for (const obs of this.obstacles) {
       if (
         x + radius >= obs.minX &&
@@ -1384,6 +2506,12 @@ export class WorldTerrain {
         z + radius >= obs.minZ &&
         z - radius <= obs.maxZ
       ) {
+        // Vertical height check if obstacle has elevation bounds
+        if (y !== undefined && obs.minY !== undefined && obs.maxY !== undefined) {
+          if (y + 1.8 < obs.minY || y > obs.maxY) {
+            continue; // Entity is underneath or above the obstacle!
+          }
+        }
         return true;
       }
     }

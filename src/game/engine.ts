@@ -52,6 +52,8 @@ export class GameEngine {
   public isAirborne = false;
   public verticalSpeed = 0;
   public isDriving = false;
+  public playerStance: 'stand' | 'crouch' | 'prone' | 'swim' = 'stand';
+  public isSwimming = false;
 
   // Settings & Loop
   public settings: GameSettings = {
@@ -149,7 +151,7 @@ export class GameEngine {
     this.scene.add(this.playerRig.group);
 
     // NPCs & Vehicles
-    const heightFunc = (x: number, z: number) => this.terrain.getTerrainHeight(x, z);
+    const heightFunc = (x: number, z: number, y?: number) => this.terrain.getTerrainHeight(x, z, y);
     this.npcManager = new NPCManager(this.scene, heightFunc);
     this.vehicleManager = new VehicleManager(this.scene, heightFunc);
 
@@ -280,8 +282,9 @@ export class GameEngine {
 
       this.vehicleManager.applyDriveInput(delta, throttle, steer, handbrake);
 
-      // Keep player seated inside vehicle
-      playerPos.copy(activeVeh.group.position).add(activeVeh.driverSeatOffset);
+      // Keep player seated inside vehicle aligned with vehicle rotation
+      const rotatedSeatOffset = activeVeh.driverSeatOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), activeVeh.group.rotation.y);
+      playerPos.copy(activeVeh.group.position).add(rotatedSeatOffset);
       this.playerRig.group.rotation.y = activeVeh.group.rotation.y;
       this.playerRig.updateAnimation(delta, 0, false, true);
 
@@ -299,7 +302,7 @@ export class GameEngine {
         const exitPos = this.vehicleManager.exitVehicle();
         this.isDriving = false;
         playerPos.copy(exitPos);
-        playerPos.y = this.terrain.getTerrainHeight(playerPos.x, playerPos.z);
+        playerPos.y = this.terrain.getTerrainHeight(playerPos.x, playerPos.z, playerPos.y);
         this.callbacks.onVehicleStateChanged?.(null);
         this.callbacks.onNotification?.('Exited Vehicle', 'On Foot');
       }
@@ -323,17 +326,83 @@ export class GameEngine {
       }
       this.playerRig.group.rotation.y = this.playerRotation;
 
-      // Speed scale: Walk (3.2 m/s), Run (6.5 m/s), Sprint (9.5 m/s)
-      let baseSpeed = 4.2;
-      let animSpeed = 0.4;
-      if (input.sprint) {
-        baseSpeed = 8.5;
-        animSpeed = 1.0;
-      } else if (hasMoveInput) {
-        baseSpeed = 5.0;
-        animSpeed = 0.65;
+      // 1. Water & Swimming State Detection in River Padma
+      const inWater = this.terrain.isWater(playerPos.x, playerPos.z, playerPos.y);
+      const waterDepth = inWater ? this.terrain.getWaterDepth(playerPos.x, playerPos.z, playerPos.y) : 0;
+      const bedY = this.terrain.getGroundElevation(playerPos.x, playerPos.z);
+
+      if (inWater && (waterDepth > 0.65 || playerPos.y <= -0.4)) {
+        if (!this.isSwimming) {
+          this.isSwimming = true;
+          this.playerStance = 'swim';
+          this.isAirborne = false;
+          this.verticalSpeed = 0;
+          this.callbacks.onNotification?.('Swimming in Padma River', 'WATER');
+        }
+      } else if (this.isSwimming && (!inWater || bedY >= -0.48)) {
+        // Transition from water onto riverbank shore
+        this.isSwimming = false;
+        this.playerStance = 'stand';
+        playerPos.y = Math.max(bedY, 0.0);
+        this.callbacks.onNotification?.('Exited River onto Shore', 'ON LAND');
+      }
+
+      // 2. Posture & Stance Transitions (Crouch, Prone, Stand)
+      if (!this.isSwimming) {
+        if (input.crouch) {
+          this.playerStance = this.playerStance === 'crouch' ? 'stand' : 'crouch';
+        } else if (input.prone) {
+          this.playerStance = this.playerStance === 'prone' ? 'stand' : 'prone';
+        }
+
+        if (input.jump) {
+          if (this.playerStance === 'crouch' || this.playerStance === 'prone') {
+            this.playerStance = 'stand';
+          } else if (!this.isAirborne) {
+            this.verticalSpeed = 7.5;
+            this.isAirborne = true;
+            soundManager.playJump();
+          }
+        }
+      }
+
+      // 3. Stance-Specific Speed & Stamina Scaling
+      let baseSpeed = 4.8;
+      let animSpeed = 0.65;
+      const stats = this.questManager.playerStats;
+
+      if (this.isSwimming) {
+        if (input.sprint && stats.stamina > 5) {
+          baseSpeed = 5.2;
+          animSpeed = 1.0;
+          stats.stamina = Math.max(0, stats.stamina - delta * 8);
+        } else {
+          baseSpeed = 3.2;
+          animSpeed = 0.65;
+          stats.stamina = Math.min(stats.maxStamina, stats.stamina + delta * 3.5);
+        }
+      } else if (this.playerStance === 'prone') {
+        baseSpeed = 1.3;
+        animSpeed = 0.4;
+        stats.stamina = Math.min(stats.maxStamina, stats.stamina + delta * 5);
+      } else if (this.playerStance === 'crouch') {
+        baseSpeed = 2.4;
+        animSpeed = 0.5;
+        stats.stamina = Math.min(stats.maxStamina, stats.stamina + delta * 5);
       } else {
-        animSpeed = 0.0;
+        // Standard Standing Walk / Run / Sprint
+        if (input.sprint && stats.stamina > 5) {
+          baseSpeed = 8.5;
+          animSpeed = 1.0;
+          stats.stamina = Math.max(0, stats.stamina - delta * 6);
+        } else if (hasMoveInput) {
+          baseSpeed = 4.8;
+          animSpeed = 0.65;
+          stats.stamina = Math.min(stats.maxStamina, stats.stamina + delta * 4);
+        } else {
+          animSpeed = 0.0;
+          stats.stamina = Math.min(stats.maxStamina, stats.stamina + delta * 8);
+        }
       }
 
       // Acceleration and friction
@@ -345,42 +414,45 @@ export class GameEngine {
         this.playerVelocity.z = THREE.MathUtils.damp(this.playerVelocity.z, 0, 16, delta);
       }
 
-      // Jumping & Gravity
-      const groundY = this.terrain.getTerrainHeight(playerPos.x, playerPos.z);
-
-      if (input.jump && !this.isAirborne) {
-        this.verticalSpeed = 7.5;
-        this.isAirborne = true;
-        soundManager.playJump();
-      }
-
-      if (this.isAirborne) {
-        this.verticalSpeed -= 22 * delta; // Gravity
-        playerPos.y += this.verticalSpeed * delta;
-
-        if (playerPos.y <= groundY) {
-          playerPos.y = groundY;
-          this.isAirborne = false;
-          this.verticalSpeed = 0;
-          soundManager.playLand();
-        }
+      // 4. Gravity, Buoyancy & Vertical Placement
+      if (this.isSwimming) {
+        // Buoyancy keeps character floating at water line (-0.45)
+        playerPos.y = THREE.MathUtils.damp(playerPos.y, -0.45, 10, delta);
+        this.verticalSpeed = 0;
+        this.isAirborne = false;
       } else {
-        playerPos.y = groundY;
+        // Ground height (passes playerPos.y to distinguish flyover overpass from lower road)
+        const groundY = this.terrain.getTerrainHeight(playerPos.x, playerPos.z, playerPos.y);
+
+        if (this.isAirborne) {
+          this.verticalSpeed -= 22 * delta; // Gravity
+          playerPos.y += this.verticalSpeed * delta;
+
+          if (playerPos.y <= groundY) {
+            playerPos.y = groundY;
+            this.isAirborne = false;
+            this.verticalSpeed = 0;
+            soundManager.playLand();
+          }
+        } else {
+          playerPos.y = groundY;
+        }
       }
 
-      // Obstacle collision checking before applying displacement
+      // 5. Obstacle collision checking before applying displacement (passes playerPos.y)
+      const colRadius = this.playerStance === 'prone' ? 0.35 : this.playerStance === 'crouch' ? 0.40 : 0.45;
       const nextX = playerPos.x + this.playerVelocity.x * delta;
       const nextZ = playerPos.z + this.playerVelocity.z * delta;
 
-      if (!this.terrain.checkObstacleCollision(nextX, playerPos.z, 0.45)) {
+      if (!this.terrain.checkObstacleCollision(nextX, playerPos.z, colRadius, playerPos.y)) {
         playerPos.x = nextX;
       }
-      if (!this.terrain.checkObstacleCollision(playerPos.x, nextZ, 0.45)) {
+      if (!this.terrain.checkObstacleCollision(playerPos.x, nextZ, colRadius, playerPos.y)) {
         playerPos.z = nextZ;
       }
 
       // Footstep sound triggers
-      if (hasMoveInput && !this.isAirborne) {
+      if (hasMoveInput && !this.isAirborne && !this.isSwimming) {
         let surface: 'asphalt' | 'dirt' | 'grass' | 'wood' = 'dirt';
         if (playerPos.x < 65) surface = 'asphalt';
         else if (playerPos.x >= 50 && playerPos.x <= 125 && Math.abs(playerPos.z - 3) < 8) surface = 'wood';
@@ -389,12 +461,16 @@ export class GameEngine {
         soundManager.playFootstep(surface, input.sprint);
       }
 
-      // Update Character Animation
+      // 6. Update Character Animation with stance
       const speedNorm = hasMoveInput ? animSpeed : 0;
-      this.playerRig.updateAnimation(delta, speedNorm, this.isAirborne, false);
+      this.playerRig.updateAnimation(delta, speedNorm, this.isAirborne, false, this.playerStance);
 
-      // Camera follows player
-      this.cameraController.update(delta, playerPos, false, undefined, heightFunc);
+      // 7. Camera follows player with stance-aware height
+      const camTargetHeight =
+        this.playerStance === 'prone' ? 0.5 :
+        this.playerStance === 'crouch' ? 1.15 :
+        this.playerStance === 'swim' ? 0.85 : 1.55;
+      this.cameraController.update(delta, playerPos, false, undefined, heightFunc, camTargetHeight);
 
       // Proximity checks for interactions
       this.checkWorldInteractions(input);
@@ -403,8 +479,8 @@ export class GameEngine {
     // 3. Update Vehicles Physics & Traffic
     this.vehicleManager.update(
       delta,
-      heightFunc,
-      (x, z, r) => this.terrain.checkObstacleCollision(x, z, r),
+      (x, z, y) => this.terrain.getTerrainHeight(x, z, y),
+      (x, z, r, y) => this.terrain.checkObstacleCollision(x, z, r, y),
     );
 
     // 4. Update Living NPCs

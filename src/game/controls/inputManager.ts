@@ -8,6 +8,8 @@ export interface InputState {
   moveRight: number; // -1 to 1
   sprint: boolean;
   jump: boolean;
+  crouch: boolean;
+  prone: boolean;
   interact: boolean;
   enterVehicle: boolean;
   openMap: boolean;
@@ -25,6 +27,8 @@ export class InputManager {
   public touchCameraDelta: { x: number; y: number } = { x: 0, y: 0 };
   public virtualSprint = false;
   public virtualJump = false;
+  public virtualCrouch = false;
+  public virtualProne = false;
   public virtualInteract = false;
   public virtualDrive = false;
   public virtualMap = false;
@@ -137,6 +141,8 @@ export class InputManager {
 
     const sprint = !!(this.keysHeld['ShiftLeft'] || this.keysHeld['ShiftRight'] || this.virtualSprint);
     const jump = !!(this.keysJustPressed['Space'] || this.virtualJump);
+    const crouch = !!(this.keysJustPressed['KeyC'] || this.virtualCrouch);
+    const prone = !!(this.keysJustPressed['KeyZ'] || this.virtualProne);
     const interact = !!(this.keysJustPressed['KeyE'] || this.virtualInteract);
     const enterVehicle = !!(this.keysJustPressed['KeyF'] || this.virtualDrive);
     const openMap = !!(this.keysJustPressed['KeyM'] || this.virtualMap);
@@ -149,6 +155,8 @@ export class InputManager {
     // Reset per-frame edge triggers and deltas
     this.keysJustPressed = {};
     this.virtualJump = false;
+    this.virtualCrouch = false;
+    this.virtualProne = false;
     this.virtualInteract = false;
     this.virtualDrive = false;
     this.virtualMap = false;
@@ -162,6 +170,8 @@ export class InputManager {
       moveRight: moveRt,
       sprint,
       jump,
+      crouch,
+      prone,
       interact,
       enterVehicle,
       openMap,
