@@ -30,6 +30,9 @@ import { ChatModal, ChatMessage } from './game/ui/ChatModal';
 import { PlayerListModal, PlayerInfo } from './game/ui/PlayerListModal';
 import { StatsModal } from './game/ui/StatsModal';
 import { NetworkConfig } from './game/config/networkConfig';
+import { RankingsModal } from './game/ui/RankingsModal';
+import { CyberTeslaModal } from './game-house/CyberTeslaModal';
+import { GameDoorMetadata } from './game-house/gameRegistry';
 import { Bell, X } from 'lucide-react';
 
 export default function App() {
@@ -52,6 +55,10 @@ export default function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isPlayerListOpen, setIsPlayerListOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [isRankingsOpen, setIsRankingsOpen] = useState(false);
+  const [isCyberTeslaOpen, setIsCyberTeslaOpen] = useState(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+  const [currentPlaytimeSeconds, setCurrentPlaytimeSeconds] = useState(0);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [onlineCount, setOnlineCount] = useState(1);
@@ -95,8 +102,10 @@ export default function App() {
   const [playerYaw, setPlayerYaw] = useState<number>(0);
   const [playerStance, setPlayerStance] = useState<'stand' | 'crouch' | 'prone' | 'swim'>('stand');
   const [isSwimming, setIsSwimming] = useState<boolean>(false);
+  const [isDiving, setIsDiving] = useState<boolean>(false);
   const [customWaypoint, setCustomWaypoint] = useState<{ x: number; z: number } | null>(null);
   const [fps, setFps] = useState<number>(60);
+  const [frameTime, setFrameTime] = useState<number>(16.6);
   const [toastNotification, setToastNotification] = useState<{ title?: string; msg: string } | null>(null);
   const [isMobile, setIsMobile] = useState<boolean>(false);
 
@@ -130,7 +139,10 @@ export default function App() {
       onNotification: (msg, title) => showToast(msg, title),
       onVehicleStateChanged: (veh) => setActiveVehicle(veh),
       onTimeUpdated: (t) => setTimeOfDay(t),
-      onFPSUpdated: (val) => setFps(val),
+      onFPSUpdated: (val, ft) => {
+        setFps(val);
+        if (ft !== undefined) setFrameTime(ft);
+      },
       onMultiplayerConnectionChanged: (_conn, count) => {
         setOnlineCount(count);
         if (engineRef.current) {
@@ -152,12 +164,21 @@ export default function App() {
         setUnreadChatCount((prev) => prev + 1);
         soundManager.playCollectCoin();
       },
+      onEnterGameDoor: (door: GameDoorMetadata) => {
+        if (door.id === 'game_cyber_tesla') {
+          setIsCyberTeslaOpen(true);
+          soundManager.playVehicleDoor();
+        } else {
+          showToast(`${door.title} (${door.category}) is coming soon to Game House Module 02!`, 'GAME HOUSE');
+        }
+      },
     });
 
     engine.voiceChatManager.onStateChanged = (state) => {
       setIsVoiceActive(state.enabled);
       setIsMicMuted(state.muted);
       setIsDeafened(state.deafened);
+      setAutoplayBlocked(!!state.autoplayBlocked);
       const isLocalSpeaking = state.speakers.includes(engine.multiplayerManager.localPlayerId);
       setIsSpeaking(isLocalSpeaking);
       if (state.error) {
@@ -187,60 +208,100 @@ export default function App() {
       setPlayerStats({ ...eng.questManager.playerStats });
       setPlayerStance(eng.playerStance);
       setIsSwimming(eng.isSwimming);
+      setIsDiving(eng.isDiving);
     }, 80);
-
-    // Global Key Handlers for M (Map), I (Inventory), Esc (Settings/Pause)
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'KeyM') {
-        setIsMapOpen((prev) => !prev);
-      } else if (e.code === 'KeyI') {
-        setIsInventoryOpen((prev) => !prev);
-      } else if (e.code === 'Escape') {
-        if (
-          activeDialogueNPC ||
-          isMapOpen ||
-          isInventoryOpen ||
-          isMultiplayerOpen ||
-          isInstallModalOpen ||
-          isPublishGuideOpen ||
-          isAuthOpen ||
-          isProfileOpen ||
-          isCharacterSelectOpen ||
-          isLeaderboardOpen ||
-          isChatOpen ||
-          isPlayerListOpen ||
-          isStatsOpen
-        ) {
-          setActiveDialogueNPC(null);
-          setIsMapOpen(false);
-          setIsInventoryOpen(false);
-          setIsMultiplayerOpen(false);
-          setIsInstallModalOpen(false);
-          setIsPublishGuideOpen(false);
-          setIsAuthOpen(false);
-          setIsProfileOpen(false);
-          setIsCharacterSelectOpen(false);
-          setIsLeaderboardOpen(false);
-          setIsChatOpen(false);
-          setIsPlayerListOpen(false);
-          setIsStatsOpen(false);
-        } else {
-          setIsSettingsOpen((prev) => !prev);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
 
     // Start engine loop
     engine.start();
 
     return () => {
       clearInterval(hudInterval);
-      window.removeEventListener('keydown', handleKeyDown);
       engine.dispose();
       engineRef.current = null;
     };
-  }, [showToast, isChatOpen, isPlayerListOpen, isStatsOpen]);
+  }, [showToast]);
+
+  // Global Keyboard shortcuts with non-restarting functional state updates
+  useEffect(() => {
+    const handleGlobalKeys = (e: KeyboardEvent) => {
+      if (e.code === 'KeyM') {
+        setIsMapOpen((prev) => !prev);
+      } else if (e.code === 'KeyI') {
+        setIsInventoryOpen((prev) => !prev);
+      } else if (e.code === 'Escape') {
+        let anyClosed = false;
+        setActiveDialogueNPC((curr) => { if (curr) anyClosed = true; return null; });
+        setIsMapOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsInventoryOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsMultiplayerOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsInstallModalOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsPublishGuideOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsAuthOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsProfileOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsCharacterSelectOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsLeaderboardOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsChatOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsPlayerListOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsStatsOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsRankingsOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsCyberTeslaOpen((curr) => { if (curr) anyClosed = true; return false; });
+
+        setIsSettingsOpen((curr) => (curr ? false : anyClosed ? false : true));
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeys);
+    return () => window.removeEventListener('keydown', handleGlobalKeys);
+  }, []);
+
+  // Active playtime tracking & server sync
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+
+    // 1-second local increment for real-time responsiveness
+    const secondTimer = setInterval(() => {
+      setCurrentPlaytimeSeconds((s) => s + 1);
+    }, 1000);
+
+    // Heartbeat every 30 seconds
+    const sendHeartbeat = () => {
+      const uid = currentUser?.uid || engineRef.current?.multiplayerManager.localPlayerId || 'guest';
+      const name = currentUser?.displayName || engineRef.current?.multiplayerManager.localPlayerName || 'Explorer';
+      fetch(NetworkConfig.getApiUrl('/api/player/heartbeat'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: uid,
+          name,
+          elapsedSeconds: 30,
+        }),
+      }).catch(() => {});
+
+      if (engineRef.current) {
+        const stats = engineRef.current.questManager.playerStats;
+        const questsCompleted = engineRef.current.questManager.quests.filter((q) => q.status === 'completed').length;
+        fetch(NetworkConfig.getApiUrl('/api/rankings/competitive/update'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: uid,
+            name,
+            level: stats.level,
+            quests: questsCompleted,
+            taka: stats.money,
+            distanceTraveled: Math.round(stats.exp),
+          }),
+        }).catch(() => {});
+      }
+    };
+
+    sendHeartbeat();
+    const heartbeatTimer = setInterval(sendHeartbeat, 30000);
+
+    return () => {
+      clearInterval(secondTimer);
+      clearInterval(heartbeatTimer);
+    };
+  }, [gameState, currentUser]);
 
   const handleStartGame = (mode: 'single' | 'multiplayer') => {
     setGameState('playing');
@@ -310,7 +371,10 @@ export default function App() {
   const handleUpdateSettings = (newSettings: Partial<GameSettings>) => {
     if (!engineRef.current) return;
     engineRef.current.settings = { ...engineRef.current.settings, ...newSettings };
-    if (newSettings.shadows !== undefined && !engineRef.current.isSoftwareGl) {
+    if (newSettings.quality) {
+      engineRef.current.applyGraphicsQuality(newSettings.quality);
+      showToast(`Graphics preset set to ${newSettings.quality.toUpperCase()}`, 'SETTINGS');
+    } else if (newSettings.shadows !== undefined && !engineRef.current.isSoftwareGl) {
       engineRef.current.renderer.shadowMap.enabled = newSettings.shadows;
     }
   };
@@ -370,6 +434,11 @@ export default function App() {
             isSpeaking={isSpeaking}
             unreadChatCount={unreadChatCount}
             customWaypoint={customWaypoint}
+            autoplayBlocked={autoplayBlocked}
+            fps={fps}
+            frameTime={frameTime}
+            playerStance={playerStance}
+            isDiving={isDiving}
             onOpenMap={() => setIsMapOpen(true)}
             onOpenChat={() => {
               setIsChatOpen(true);
@@ -377,8 +446,14 @@ export default function App() {
             }}
             onOpenPlayers={() => setIsPlayerListOpen(true)}
             onOpenStats={() => setIsStatsOpen(true)}
+            onOpenRankings={() => setIsRankingsOpen(true)}
             onToggleVoice={handleToggleVoice}
             onToggleDeafen={handleToggleDeafen}
+            onUnlockAudio={() => {
+              engineRef.current?.voiceChatManager.unlockAudio();
+              setAutoplayBlocked(false);
+              showToast('Voice audio enabled', 'VOICE CHAT');
+            }}
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenInventory={() => setIsInventoryOpen(true)}
           />
@@ -551,6 +626,25 @@ export default function App() {
           onClose={() => setIsStatsOpen(false)}
         />
       )}
+
+      {/* Dual Player Rankings Modal (Playtime & Competitive) */}
+      {isRankingsOpen && (
+        <RankingsModal
+          currentUser={currentUser}
+          playerStats={playerStats}
+          currentPlaytimeSeconds={currentPlaytimeSeconds}
+          onClose={() => setIsRankingsOpen(false)}
+        />
+      )}
+
+      {/* Game House Module 02 — Bangladeshi Tesla Highway Challenge */}
+      <CyberTeslaModal
+        isOpen={isCyberTeslaOpen}
+        onClose={() => {
+          setIsCyberTeslaOpen(false);
+          soundManager.playUiClick();
+        }}
+      />
     </div>
   );
 }

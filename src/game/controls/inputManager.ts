@@ -10,6 +10,8 @@ export interface InputState {
   jump: boolean;
   crouch: boolean;
   prone: boolean;
+  dive: boolean;
+  surface: boolean;
   interact: boolean;
   enterVehicle: boolean;
   openMap: boolean;
@@ -29,6 +31,8 @@ export class InputManager {
   public virtualJump = false;
   public virtualCrouch = false;
   public virtualProne = false;
+  public virtualDive = false;
+  public virtualSurface = false;
   public virtualInteract = false;
   public virtualDrive = false;
   public virtualMap = false;
@@ -143,6 +147,8 @@ export class InputManager {
     const jump = !!(this.keysJustPressed['Space'] || this.virtualJump);
     const crouch = !!(this.keysJustPressed['KeyC'] || this.virtualCrouch);
     const prone = !!(this.keysJustPressed['KeyZ'] || this.virtualProne);
+    const dive = !!(this.keysHeld['KeyC'] || this.keysHeld['KeyZ'] || this.virtualDive);
+    const surface = !!(this.keysHeld['Space'] || this.virtualSurface || this.virtualJump);
     const interact = !!(this.keysJustPressed['KeyE'] || this.virtualInteract);
     const enterVehicle = !!(this.keysJustPressed['KeyF'] || this.virtualDrive);
     const openMap = !!(this.keysJustPressed['KeyM'] || this.virtualMap);
@@ -157,6 +163,8 @@ export class InputManager {
     this.virtualJump = false;
     this.virtualCrouch = false;
     this.virtualProne = false;
+    this.virtualDive = false;
+    this.virtualSurface = false;
     this.virtualInteract = false;
     this.virtualDrive = false;
     this.virtualMap = false;
@@ -172,6 +180,8 @@ export class InputManager {
       jump,
       crouch,
       prone,
+      dive,
+      surface,
       interact,
       enterVehicle,
       openMap,

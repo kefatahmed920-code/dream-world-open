@@ -16,7 +16,10 @@ import { InputManager } from './controls/inputManager';
 import { soundManager } from './audio/soundManager';
 import { MultiplayerManager } from './multiplayer/multiplayerManager';
 import { VoiceChatManager } from './multiplayer/voiceChatManager';
-import { GameSettings, SavedGameState } from './types';
+import { GameSettings, SavedGameState, GraphicsQuality } from './types';
+import { GameHouseBuilding } from '../game-house/GameHouseBuilding';
+import { GameDoorMetadata } from '../game-house/gameRegistry';
+import { RiverEcosystem } from './world/riverEcosystem';
 
 export interface GameEngineCallbacks {
   onInteractionPrompt?: (prompt: string | null) => void;
@@ -25,10 +28,19 @@ export interface GameEngineCallbacks {
   onStatsUpdated?: (stats: SavedGameState['stats']) => void;
   onVehicleStateChanged?: (vehicle: ActiveVehicle | null) => void;
   onTimeUpdated?: (timeOfDay: number) => void;
-  onFPSUpdated?: (fps: number) => void;
+  onFPSUpdated?: (fps: number, frameTimeMs?: number) => void;
   onMultiplayerConnectionChanged?: (connected: boolean, playerCount: number) => void;
   onMultiplayerChatReceived?: (sender: string, text: string) => void;
+  onEnterGameDoor?: (door: GameDoorMetadata) => void;
 }
+
+// Static preallocated scratch objects to eliminate per-frame GC heap churn
+const _fwdVector = new THREE.Vector3();
+const _rtVector = new THREE.Vector3();
+const _moveDir = new THREE.Vector3();
+const _seatOffsetScratch = new THREE.Vector3();
+const _upAxis = new THREE.Vector3(0, 1, 0);
+const _wfTarget = new THREE.Vector3(270, 15, -95);
 
 export class GameEngine {
   public container: HTMLElement;
@@ -47,6 +59,8 @@ export class GameEngine {
   public inputManager: InputManager;
   public multiplayerManager: MultiplayerManager;
   public voiceChatManager: VoiceChatManager;
+  public gameHouse: GameHouseBuilding;
+  public riverEcosystem: RiverEcosystem;
 
   // Player Physics & Locomotion State
   public playerVelocity = new THREE.Vector3();
@@ -56,10 +70,13 @@ export class GameEngine {
   public isDriving = false;
   public playerStance: 'stand' | 'crouch' | 'prone' | 'swim' = 'stand';
   public isSwimming = false;
+  public isDiving = false;
+  public isCameraUnderwater = false;
+  private swimStrokeTimer = 0;
 
   // Settings & Loop
   public settings: GameSettings = {
-    quality: 'high',
+    quality: 'medium',
     masterVolume: 0.8,
     sfxVolume: 0.9,
     timeSpeed: 0.05,
@@ -133,6 +150,20 @@ export class GameEngine {
 
     // 3. Subsystem Initialization
     this.terrain = new WorldTerrain(this.scene);
+
+    // River Ecosystem: 24 Animated Fish (single instanced mesh), riverbank rocks, water splashes
+    this.riverEcosystem = new RiverEcosystem();
+    this.scene.add(this.riverEcosystem.group);
+
+    // Game House — Module 02
+    this.gameHouse = new GameHouseBuilding();
+    this.scene.add(this.gameHouse.group);
+    this.terrain.obstacles.push(...this.gameHouse.obstacles);
+
+    this.gameHouse.doorManager.onEnterDoorTriggered = (door) => {
+      this.callbacks.onEnterGameDoor?.(door);
+    };
+
     this.weatherManager = new WeatherManager(this.scene);
     this.questManager = new QuestManager();
 
@@ -176,10 +207,18 @@ export class GameEngine {
     this.multiplayerManager.onPlayerLeft = (name) => {
       this.callbacks.onNotification?.(`${name} left the room`, 'ONLINE');
     };
+    this.multiplayerManager.onRoomJoined = () => {
+      this.voiceChatManager.initRoomListening();
+    };
 
     // Window Resize Handler
     this.handleResize = this.handleResize.bind(this);
     window.addEventListener('resize', this.handleResize);
+
+    // Auto-select quality preset for mobile / low-spec devices
+    const isMobile = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0 || window.innerWidth <= 1024);
+    const defaultQuality: GraphicsQuality = (isMobile || this.isSoftwareGl) ? 'low' : 'medium';
+    this.applyGraphicsQuality(defaultQuality);
 
     // Load saved game if exists
     this.loadSavedGame();
@@ -285,9 +324,9 @@ export class GameEngine {
 
       this.vehicleManager.applyDriveInput(delta, throttle, steer, handbrake);
 
-      // Keep player seated inside vehicle aligned with vehicle rotation
-      const rotatedSeatOffset = activeVeh.driverSeatOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), activeVeh.group.rotation.y);
-      playerPos.copy(activeVeh.group.position).add(rotatedSeatOffset);
+      // Keep player seated inside vehicle aligned with vehicle rotation without allocations
+      _seatOffsetScratch.copy(activeVeh.driverSeatOffset).applyAxisAngle(_upAxis, activeVeh.group.rotation.y);
+      playerPos.copy(activeVeh.group.position).add(_seatOffsetScratch);
       this.playerRig.group.rotation.y = activeVeh.group.rotation.y;
       this.playerRig.updateAnimation(delta, 0, false, true);
 
@@ -310,57 +349,82 @@ export class GameEngine {
         this.callbacks.onNotification?.('Exited Vehicle', 'On Foot');
       }
     } else {
-      // --- ON-FOOT MODE ---
-      // Camera-relative movement vector
+      // --- ON-FOOT & SWIMMING MODE ---
+      // Camera-relative movement vector using static preallocated vectors
       const camYaw = this.cameraController.yaw;
-      const fwdVector = new THREE.Vector3(-Math.sin(camYaw), 0, -Math.cos(camYaw));
-      const rtVector = new THREE.Vector3(Math.cos(camYaw), 0, -Math.sin(camYaw));
+      _fwdVector.set(-Math.sin(camYaw), 0, -Math.cos(camYaw));
+      _rtVector.set(Math.cos(camYaw), 0, -Math.sin(camYaw));
 
-      const moveDir = new THREE.Vector3()
-        .addScaledVector(fwdVector, input.moveForward)
-        .addScaledVector(rtVector, input.moveRight);
+      _moveDir.set(0, 0, 0)
+        .addScaledVector(_fwdVector, input.moveForward)
+        .addScaledVector(_rtVector, input.moveRight);
 
-      const hasMoveInput = moveDir.lengthSq() > 0.01;
+      const hasMoveInput = _moveDir.lengthSq() > 0.01;
       if (hasMoveInput) {
-        moveDir.normalize();
-        // Turn player towards movement direction
-        const targetRot = Math.atan2(moveDir.x, moveDir.z);
+        _moveDir.normalize();
+        // Turn player smoothly towards intended direction of travel
+        const targetRot = Math.atan2(_moveDir.x, _moveDir.z);
         this.playerRotation = THREE.MathUtils.damp(this.playerRotation, targetRot, 14, delta);
       }
       this.playerRig.group.rotation.y = this.playerRotation;
 
-      // 1. Water & Swimming State Detection in River Padma
+      // 1. River Padma Water & Swimming State Detection
       const inWater = this.terrain.isWater(playerPos.x, playerPos.z, playerPos.y);
       const waterDepth = inWater ? this.terrain.getWaterDepth(playerPos.x, playerPos.z, playerPos.y) : 0;
       const bedY = this.terrain.getGroundElevation(playerPos.x, playerPos.z);
 
-      if (inWater && (waterDepth > 0.65 || playerPos.y <= -0.4)) {
+      if (inWater && (waterDepth > 0.55 || playerPos.y <= -0.4)) {
         if (!this.isSwimming) {
           this.isSwimming = true;
           this.playerStance = 'swim';
           this.isAirborne = false;
           this.verticalSpeed = 0;
-          this.callbacks.onNotification?.('Swimming in Padma River', 'WATER');
+          this.riverEcosystem.spawnSplash(playerPos.x, playerPos.z, 1.2);
+          soundManager.playWaterSplash();
+          this.callbacks.onNotification?.('Entered River Padma (Surface / Dive enabled)', 'SWIMMING');
         }
       } else if (this.isSwimming && (!inWater || bedY >= -0.48)) {
-        // Transition from water onto riverbank shore
+        // Smooth transition from water onto riverbank shore
         this.isSwimming = false;
+        this.isDiving = false;
         this.playerStance = 'stand';
         playerPos.y = Math.max(bedY, 0.0);
-        this.callbacks.onNotification?.('Exited River onto Shore', 'ON LAND');
+        this.riverEcosystem.spawnSplash(playerPos.x, playerPos.z, 0.8);
+        soundManager.playWaterSplash();
+        this.callbacks.onNotification?.('Stepped onto Riverbank', 'ON SHORE');
       }
 
-      // 2. Posture & Stance Transitions (Crouch, Prone, Stand)
+      // 2. Posture & Stance Transitions with Overhead Ceiling Clearance Check
       if (!this.isSwimming) {
         if (input.crouch) {
-          this.playerStance = this.playerStance === 'crouch' ? 'stand' : 'crouch';
+          if (this.playerStance === 'crouch') {
+            if (this.checkCeilingObstacle(playerPos.x, playerPos.z, playerPos.y)) {
+              this.callbacks.onNotification?.('Cannot stand up (low ceiling clearance)', 'OBSTACLE');
+            } else {
+              this.playerStance = 'stand';
+            }
+          } else {
+            this.playerStance = 'crouch';
+          }
         } else if (input.prone) {
-          this.playerStance = this.playerStance === 'prone' ? 'stand' : 'prone';
+          if (this.playerStance === 'prone') {
+            if (this.checkCeilingObstacle(playerPos.x, playerPos.z, playerPos.y)) {
+              this.callbacks.onNotification?.('Cannot stand up (low ceiling clearance)', 'OBSTACLE');
+            } else {
+              this.playerStance = 'stand';
+            }
+          } else {
+            this.playerStance = 'prone';
+          }
         }
 
         if (input.jump) {
           if (this.playerStance === 'crouch' || this.playerStance === 'prone') {
-            this.playerStance = 'stand';
+            if (this.checkCeilingObstacle(playerPos.x, playerPos.z, playerPos.y)) {
+              this.callbacks.onNotification?.('Cannot stand up (low ceiling clearance)', 'OBSTACLE');
+            } else {
+              this.playerStance = 'stand';
+            }
           } else if (!this.isAirborne) {
             this.verticalSpeed = 7.5;
             this.isAirborne = true;
@@ -376,17 +440,17 @@ export class GameEngine {
 
       if (this.isSwimming) {
         if (input.sprint && stats.stamina > 5) {
-          baseSpeed = 5.2;
+          baseSpeed = 5.0;
           animSpeed = 1.0;
           stats.stamina = Math.max(0, stats.stamina - delta * 8);
         } else {
-          baseSpeed = 3.2;
+          baseSpeed = 3.0;
           animSpeed = 0.65;
           stats.stamina = Math.min(stats.maxStamina, stats.stamina + delta * 3.5);
         }
       } else if (this.playerStance === 'prone') {
-        baseSpeed = 1.3;
-        animSpeed = 0.4;
+        baseSpeed = 1.35; // Authentic army crawl pace
+        animSpeed = 0.45;
         stats.stamina = Math.min(stats.maxStamina, stats.stamina + delta * 5);
       } else if (this.playerStance === 'crouch') {
         baseSpeed = 2.4;
@@ -410,21 +474,55 @@ export class GameEngine {
 
       // Acceleration and friction
       if (hasMoveInput) {
-        this.playerVelocity.x = THREE.MathUtils.damp(this.playerVelocity.x, moveDir.x * baseSpeed, 12, delta);
-        this.playerVelocity.z = THREE.MathUtils.damp(this.playerVelocity.z, moveDir.z * baseSpeed, 12, delta);
+        this.playerVelocity.x = THREE.MathUtils.damp(this.playerVelocity.x, _moveDir.x * baseSpeed, 12, delta);
+        this.playerVelocity.z = THREE.MathUtils.damp(this.playerVelocity.z, _moveDir.z * baseSpeed, 12, delta);
       } else {
         this.playerVelocity.x = THREE.MathUtils.damp(this.playerVelocity.x, 0, 16, delta);
         this.playerVelocity.z = THREE.MathUtils.damp(this.playerVelocity.z, 0, 16, delta);
       }
 
-      // 4. Gravity, Buoyancy & Vertical Placement
+      // 4. Vertical Locomotion: Swimming, Diving, Buoyancy & Land Gravity
       if (this.isSwimming) {
-        // Buoyancy keeps character floating at water line (-0.45)
-        playerPos.y = THREE.MathUtils.damp(playerPos.y, -0.45, 10, delta);
-        this.verticalSpeed = 0;
+        const minAllowedY = bedY + 0.35; // Cannot sink through riverbed
+        const maxSurfaceY = -0.45; // River water surface line
+
+        // Diving Down / Surfacing Up
+        if (input.dive) {
+          this.verticalSpeed = THREE.MathUtils.damp(this.verticalSpeed, -2.0, 8, delta);
+          this.isDiving = true;
+        } else if (input.surface || input.jump) {
+          this.verticalSpeed = THREE.MathUtils.damp(this.verticalSpeed, 2.2, 8, delta);
+          if (playerPos.y >= -0.55) {
+            this.isDiving = false;
+          }
+        } else {
+          // Stable buoyancy: gently float back up if submerged, or stay stabilized at surface
+          if (playerPos.y < -0.52) {
+            this.verticalSpeed = THREE.MathUtils.damp(this.verticalSpeed, 0.75, 4, delta);
+          } else {
+            this.verticalSpeed = THREE.MathUtils.damp(this.verticalSpeed, 0, 10, delta);
+            playerPos.y = THREE.MathUtils.damp(playerPos.y, maxSurfaceY, 12, delta);
+            this.isDiving = false;
+          }
+        }
+
+        playerPos.y = THREE.MathUtils.clamp(playerPos.y + this.verticalSpeed * delta, minAllowedY, maxSurfaceY);
         this.isAirborne = false;
+
+        // Periodic swim stroke acoustic feedback
+        if (hasMoveInput) {
+          this.swimStrokeTimer += delta;
+          const strokeInterval = input.sprint ? 0.45 : 0.68;
+          if (this.swimStrokeTimer >= strokeInterval) {
+            this.swimStrokeTimer = 0;
+            soundManager.playSwimStroke();
+            if (playerPos.y >= -0.55) {
+              this.riverEcosystem.spawnSplash(playerPos.x, playerPos.z, 0.45);
+            }
+          }
+        }
       } else {
-        // Ground height (passes playerPos.y to distinguish flyover overpass from lower road)
+        // On Land: Terrain elevation & airborne gravity
         const groundY = this.terrain.getTerrainHeight(playerPos.x, playerPos.z, playerPos.y);
 
         if (this.isAirborne) {
@@ -442,7 +540,7 @@ export class GameEngine {
         }
       }
 
-      // 5. Obstacle collision checking before applying displacement (passes playerPos.y)
+      // 5. Obstacle collision checking before applying horizontal displacement
       const colRadius = this.playerStance === 'prone' ? 0.35 : this.playerStance === 'crouch' ? 0.40 : 0.45;
       const nextX = playerPos.x + this.playerVelocity.x * delta;
       const nextZ = playerPos.z + this.playerVelocity.z * delta;
@@ -454,7 +552,7 @@ export class GameEngine {
         playerPos.z = nextZ;
       }
 
-      // Footstep sound triggers
+      // Footstep sound triggers on land
       if (hasMoveInput && !this.isAirborne && !this.isSwimming) {
         let surface: 'asphalt' | 'dirt' | 'grass' | 'wood' = 'dirt';
         if (playerPos.x < 65) surface = 'asphalt';
@@ -470,10 +568,24 @@ export class GameEngine {
 
       // 7. Camera follows player with stance-aware height
       const camTargetHeight =
-        this.playerStance === 'prone' ? 0.5 :
+        this.playerStance === 'prone' ? 0.40 :
         this.playerStance === 'crouch' ? 1.15 :
-        this.playerStance === 'swim' ? 0.85 : 1.55;
-      this.cameraController.update(delta, playerPos, false, undefined, heightFunc, camTargetHeight);
+        this.playerStance === 'swim' ? 0.70 : 1.55;
+      this.cameraController.update(delta, playerPos, false, undefined, heightFunc, camTargetHeight, this.isSwimming);
+
+      // 8. Underwater Camera Detection & Atmosphere Transition
+      const cameraInWater = this.camera.position.y < -0.42;
+      if (cameraInWater && !this.isCameraUnderwater) {
+        this.isCameraUnderwater = true;
+        this.scene.fog = new THREE.FogExp2(0x0a4048, 0.052);
+        soundManager.setUnderwater(true);
+      } else if (!cameraInWater && this.isCameraUnderwater) {
+        this.isCameraUnderwater = false;
+        this.scene.fog = new THREE.FogExp2(0x94a3b8, 0.0035);
+        soundManager.setUnderwater(false);
+        this.riverEcosystem.spawnSplash(playerPos.x, playerPos.z, 0.8);
+        soundManager.playWaterSplash();
+      }
 
       // Proximity checks for interactions
       this.checkWorldInteractions(input);
@@ -492,21 +604,27 @@ export class GameEngine {
     // 5. Update World Terrain (waterfall, river wave offsets)
     this.terrain.update(delta);
 
-    // 6. Update Dynamic Weather & Lighting
+    // 6. Update River Wildlife & Splash Effects
+    this.riverEcosystem.update(delta);
+
+    // 7. Update Dynamic Weather & Lighting
     this.weatherManager.update(delta, playerPos);
     this.callbacks.onTimeUpdated?.(this.weatherManager.timeOfDay);
 
-    // 7. Update Audio Ambience (distance to waterfall at [270, -95])
-    const wfDist = playerPos.distanceTo(new THREE.Vector3(270, 15, -95));
+    // 8. Update Audio Ambience using static scratch vector
+    const wfDist = playerPos.distanceTo(_wfTarget);
     soundManager.updateAmbience(wfDist, this.weatherManager.weather === 'rain');
 
-    // 8. Check Quest Distance Triggers
+    // 9. Check Quest Distance Triggers
     this.questManager.checkProximityObjectives(
       { x: playerPos.x, y: playerPos.y, z: playerPos.z },
       this.isDriving,
     );
 
-    // 9. Update Real-Time Multiplayer Sync
+    // 10. Update Game House Module 02 (doors, proximity, animations)
+    this.gameHouse.update(playerPos, delta);
+
+    // 11. Update Real-Time Multiplayer Sync
     const speedFactor = this.isDriving
       ? Math.min(1.0, Math.abs(this.vehicleManager.activePlayerVehicle?.velocity || 0) / 12)
       : Math.min(1.0, this.playerVelocity.length() / 8.5);
@@ -520,6 +638,47 @@ export class GameEngine {
       this.isDriving,
       this.playerRig.appearance,
     );
+  }
+
+  /**
+   * Check if an overhead obstacle blocks the player from standing up
+   */
+  public checkCeilingObstacle(x: number, z: number, y: number): boolean {
+    // Check overpass lower roadway clearance
+    if (x >= 18 && x <= 44 && z >= -150 && z <= 150) {
+      if (y < 4.2 && y + 1.85 >= 5.0) return true;
+    }
+    // Check registered 3D world obstacle boundaries
+    for (const obs of this.terrain.obstacles) {
+      if (x >= obs.minX - 0.25 && x <= obs.maxX + 0.25 && z >= obs.minZ - 0.25 && z <= obs.maxZ + 0.25) {
+        if (obs.minY !== undefined && obs.minY > y && obs.minY < y + 1.85) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Apply Graphics Quality Preset
+   */
+  public applyGraphicsQuality(quality: GraphicsQuality) {
+    this.settings.quality = quality;
+    if (quality === 'low') {
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0));
+      this.renderer.shadowMap.enabled = false;
+      this.settings.shadows = false;
+    } else if (quality === 'medium') {
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFShadowMap;
+      this.settings.shadows = true;
+    } else {
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.settings.shadows = true;
+    }
   }
 
   /**
@@ -566,6 +725,20 @@ export class GameEngine {
         }
         return;
       }
+    }
+
+    // 4. Check Nearby Game House Magical Door
+    const activeDoor = this.gameHouse.doorManager.getActiveProximityDoor();
+    if (activeDoor) {
+      if (activeDoor.status === 'available') {
+        this.callbacks.onInteractionPrompt?.(`[E] Enter ${activeDoor.title}`);
+        if (input.interact) {
+          this.callbacks.onEnterGameDoor?.(activeDoor);
+        }
+      } else {
+        this.callbacks.onInteractionPrompt?.(`Door ${activeDoor.doorNumber}: ${activeDoor.title} (Coming Soon)`);
+      }
+      return;
     }
 
     // Clear prompt if no interactive target nearby
@@ -650,6 +823,7 @@ export class GameEngine {
   public dispose() {
     this.stop();
     window.removeEventListener('resize', this.handleResize);
+    this.riverEcosystem.dispose();
     this.voiceChatManager.disableVoiceChat();
     this.multiplayerManager.dispose();
     try {

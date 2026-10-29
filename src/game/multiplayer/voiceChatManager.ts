@@ -7,20 +7,43 @@ import { MultiplayerManager } from './multiplayerManager';
 import { soundManager } from '../audio/soundManager';
 
 interface VoicePeer {
+  id: string;
   connection: RTCPeerConnection;
   audioElement: HTMLAudioElement;
   remoteStream: MediaStream;
 }
 
-export type VoiceConnectionState = 'idle' | 'requesting' | 'connected' | 'error';
+export type VoiceConnectionState = 'idle' | 'listening' | 'transmitting' | 'error';
+
+export interface VoiceChatState {
+  enabled: boolean;
+  muted: boolean;
+  deafened: boolean;
+  isSpeakerEnabled: boolean;
+  isDeafened: boolean;
+  isMicActive: boolean;
+  isMicMuted: boolean;
+  connectionState: VoiceConnectionState;
+  speakers: string[];
+  activeSpeakers: string[];
+  autoplayBlocked: boolean;
+  error: string | null;
+  errorMessage: string | null;
+}
 
 export class VoiceChatManager {
-  public isVoiceEnabled = false;
-  public isMuted = false;
+  // Speaker / Listening State (Independent of microphone)
+  public isSpeakerEnabled = true;
   public isDeafened = false;
+
+  // Microphone / Transmitting State (Independent of speaker)
+  public isMicActive = false;
+  public isMicMuted = false;
+
   public connectionState: VoiceConnectionState = 'idle';
   public errorMessage: string | null = null;
   public activeSpeakers = new Set<string>();
+  public autoplayBlocked = false;
 
   private mpManager: MultiplayerManager;
   private localStream: MediaStream | null = null;
@@ -29,16 +52,10 @@ export class VoiceChatManager {
   private analyser: AnalyserNode | null = null;
   private audioCtx: AudioContext | null = null;
   private speechCheckInterval: number | null = null;
+  private userGestureUnlocked = false;
 
-  // Callbacks for UI updates
-  public onStateChanged?: (state: {
-    enabled: boolean;
-    muted: boolean;
-    deafened: boolean;
-    connectionState: VoiceConnectionState;
-    speakers: string[];
-    error: string | null;
-  }) => void;
+  // Callbacks for React HUD
+  public onStateChanged?: (state: VoiceChatState) => void;
 
   constructor(mpManager: MultiplayerManager) {
     this.mpManager = mpManager;
@@ -49,7 +66,7 @@ export class VoiceChatManager {
     };
 
     this.mpManager.onVoiceStatus = (senderId, isMuted, isSpeaking) => {
-      if (isSpeaking) {
+      if (isSpeaking && !isMuted) {
         this.activeSpeakers.add(senderId);
       } else {
         this.activeSpeakers.delete(senderId);
@@ -57,16 +74,15 @@ export class VoiceChatManager {
       this.notifyState();
     };
 
-    // When remote player joins, if our voice is active, initiate WebRTC connection
+    // When a remote player joins the room, establish connection
     const originalPlayerJoined = this.mpManager.onPlayerJoined;
     this.mpManager.onPlayerJoined = (name) => {
       originalPlayerJoined?.(name);
-      // Wait a moment for actor to initialize, then check if we should create offer
-      if (this.isVoiceEnabled && this.localStream) {
-        for (const [id] of this.mpManager.remotePlayers.entries()) {
-          if (!this.peers.has(id)) {
-            this.connectToPeer(id, true);
-          }
+      // Connect to any new peers (initiator if our ID is lexicographically greater)
+      for (const [id] of this.mpManager.remotePlayers.entries()) {
+        if (!this.peers.has(id)) {
+          const isInitiator = this.mpManager.localPlayerId > id;
+          this.connectToPeer(id, isInitiator);
         }
       }
     };
@@ -75,39 +91,136 @@ export class VoiceChatManager {
     const originalPlayerLeft = this.mpManager.onPlayerLeft;
     this.mpManager.onPlayerLeft = (name) => {
       originalPlayerLeft?.(name);
-      // Clean up any disconnected peers
       for (const [id] of this.peers.entries()) {
         if (!this.mpManager.remotePlayers.has(id)) {
           this.removePeer(id);
         }
       }
     };
+
+    // Attach global user gesture listener to automatically unlock audio on mobile / Android
+    this.setupAutoplayUnlock();
+  }
+
+  /**
+   * Set up global user-gesture audio unlock for Android / iOS browser autoplay restrictions
+   */
+  private setupAutoplayUnlock() {
+    if (typeof window === 'undefined') return;
+
+    const unlock = () => {
+      if (this.userGestureUnlocked) return;
+      this.userGestureUnlocked = true;
+      this.unlockAudio();
+
+      window.removeEventListener('click', unlock);
+      window.removeEventListener('touchstart', unlock);
+      window.removeEventListener('touchend', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+
+    window.addEventListener('click', unlock, { passive: true });
+    window.addEventListener('touchstart', unlock, { passive: true });
+    window.addEventListener('touchend', unlock, { passive: true });
+    window.addEventListener('keydown', unlock, { passive: true });
+  }
+
+  /**
+   * Resume AudioContext and play all peer audio elements
+   */
+  public unlockAudio() {
+    this.autoplayBlocked = false;
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume().catch(() => {});
+    }
+    for (const peer of this.peers.values()) {
+      if (!this.isDeafened) {
+        peer.audioElement.muted = false;
+        peer.audioElement.play().catch((err) => {
+          if (err.name === 'NotAllowedError') {
+            this.autoplayBlocked = true;
+          }
+        });
+      }
+    }
+    this.notifyState();
   }
 
   private notifyState() {
     this.onStateChanged?.({
-      enabled: this.isVoiceEnabled,
-      muted: this.isMuted,
+      enabled: this.isSpeakerEnabled || this.isMicActive,
+      muted: this.isMicMuted,
       deafened: this.isDeafened,
+      isSpeakerEnabled: this.isSpeakerEnabled,
+      isDeafened: this.isDeafened,
+      isMicActive: this.isMicActive,
+      isMicMuted: this.isMicMuted,
       connectionState: this.connectionState,
       speakers: Array.from(this.activeSpeakers),
+      activeSpeakers: Array.from(this.activeSpeakers),
+      autoplayBlocked: this.autoplayBlocked,
       error: this.errorMessage,
+      errorMessage: this.errorMessage,
     });
   }
 
-  /**
-   * Request microphone and enable room voice chat
-   */
-  public async enableVoiceChat(): Promise<boolean> {
-    if (this.isVoiceEnabled && this.localStream) return true;
+  // Backwards compatibility aliases
+  public get isVoiceEnabled(): boolean {
+    return this.isSpeakerEnabled || this.isMicActive;
+  }
+  public get isMuted(): boolean {
+    return this.isMicMuted;
+  }
+  public enableVoiceChat(): Promise<boolean> {
+    return this.enableMicrophone();
+  }
+  public disableVoiceChat(): void {
+    this.disableMicrophone();
+  }
+  public toggleMute(): boolean {
+    return this.toggleMicMute();
+  }
+  public toggleDeafen(): boolean {
+    return this.toggleSpeakerDeafen();
+  }
 
-    this.connectionState = 'requesting';
-    this.errorMessage = null;
+  /**
+   * Initialize listening on room join (called automatically when entering room)
+   */
+  public initRoomListening() {
+    this.connectionState = this.isMicActive ? 'transmitting' : 'listening';
+    // Connect to all existing remote players in the room
+    for (const [id] of this.mpManager.remotePlayers.entries()) {
+      if (!this.peers.has(id)) {
+        const isInitiator = this.mpManager.localPlayerId > id;
+        this.connectToPeer(id, isInitiator);
+      }
+    }
     this.notifyState();
+  }
+
+  /**
+   * Toggle local microphone (outgoing voice only).
+   * Does NOT affect incoming speaker audio!
+   */
+  public async toggleMicrophone(): Promise<boolean> {
+    if (!this.isMicActive) {
+      return await this.enableMicrophone();
+    } else {
+      // Toggle mute/unmute
+      return this.toggleMicMute();
+    }
+  }
+
+  /**
+   * Request microphone permission and activate outgoing transmission
+   */
+  public async enableMicrophone(): Promise<boolean> {
+    this.errorMessage = null;
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('WebRTC Voice Chat is not supported in this browser.');
+        throw new Error('WebRTC microphone not supported on this browser.');
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -120,36 +233,51 @@ export class VoiceChatManager {
       });
 
       this.localStream = stream;
-      this.isVoiceEnabled = true;
-      this.isMuted = false;
-      this.connectionState = 'connected';
+      this.isMicActive = true;
+      this.isMicMuted = false;
+      this.connectionState = 'transmitting';
       soundManager.playRadioBeep(true);
 
-      // Start speaking activity detector
-      this.startSpeechDetector(stream);
+      const audioTrack = stream.getAudioTracks()[0];
 
-      // Connect to all existing room players
-      for (const [id] of this.mpManager.remotePlayers.entries()) {
-        this.connectToPeer(id, true);
+      // Add or replace track on all existing peer connections
+      for (const peer of this.peers.values()) {
+        const sender = peer.connection.getSenders().find((s) => s.track?.kind === 'audio' || s.track === null);
+        if (sender) {
+          sender.replaceTrack(audioTrack).catch(() => {});
+        } else {
+          try {
+            peer.connection.addTrack(audioTrack, stream);
+            // Trigger renegotiation offer
+            this.renegotiatePeer(peer);
+          } catch {}
+        }
       }
 
+      // Start speech activity detector
+      this.startSpeechDetector(stream);
+
+      // Notify room that our mic is unmuted
+      this.mpManager.sendVoiceStatus(false, false);
       this.notifyState();
       return true;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Microphone permission denied';
-      this.connectionState = 'error';
-      this.errorMessage = msg.includes('Permission') ? 'Microphone access was denied in browser' : msg;
-      this.isVoiceEnabled = false;
+      const msg = err instanceof Error ? err.message : 'Microphone access denied';
+      this.isMicActive = false;
+      this.connectionState = 'listening';
+      this.errorMessage = msg.includes('Permission') || msg.includes('denied')
+        ? 'Microphone permission was denied. You can still listen to other players!'
+        : msg;
       this.notifyState();
       return false;
     }
   }
 
   /**
-   * Cleanly stop microphone and disconnect voice WebRTC
+   * Completely shut down microphone track without interrupting incoming audio
    */
-  public disableVoiceChat() {
-    if (!this.isVoiceEnabled && !this.localStream) return;
+  public disableMicrophone() {
+    if (!this.isMicActive && !this.localStream) return;
 
     soundManager.playRadioBeep(false);
 
@@ -166,55 +294,71 @@ export class VoiceChatManager {
       this.analyser = null;
     }
 
-    // Stop local audio tracks
     if (this.localStream) {
       this.localStream.getTracks().forEach((t) => t.stop());
       this.localStream = null;
     }
 
-    // Close all peer connections
-    for (const [id] of this.peers.entries()) {
-      this.removePeer(id);
+    // Replace track with null on all peers so transmission stops
+    for (const peer of this.peers.values()) {
+      const sender = peer.connection.getSenders().find((s) => s.track?.kind === 'audio');
+      if (sender) {
+        sender.replaceTrack(null).catch(() => {});
+      }
     }
 
-    this.isVoiceEnabled = false;
-    this.isMuted = false;
-    this.connectionState = 'idle';
-    this.errorMessage = null;
-    this.activeSpeakers.clear();
+    this.isMicActive = false;
+    this.isMicMuted = false;
+    this.activeSpeakers.delete(this.mpManager.localPlayerId);
+    this.connectionState = 'listening';
     this.mpManager.sendVoiceStatus(true, false);
     this.notifyState();
   }
 
   /**
-   * Toggle local microphone mute
+   * Toggle mute on active microphone (outgoing audio only)
    */
-  public toggleMute(): boolean {
-    if (!this.isVoiceEnabled || !this.localStream) return false;
-    this.isMuted = !this.isMuted;
+  public toggleMicMute(): boolean {
+    if (!this.isMicActive || !this.localStream) {
+      return false;
+    }
+
+    this.isMicMuted = !this.isMicMuted;
     this.localStream.getAudioTracks().forEach((track) => {
-      track.enabled = !this.isMuted;
+      track.enabled = !this.isMicMuted;
     });
 
-    soundManager.playRadioBeep(!this.isMuted);
-    this.mpManager.sendVoiceStatus(this.isMuted, false);
+    soundManager.playRadioBeep(!this.isMicMuted);
+
+    if (this.isMicMuted) {
+      this.activeSpeakers.delete(this.mpManager.localPlayerId);
+    }
+    this.mpManager.sendVoiceStatus(this.isMicMuted, false);
     this.notifyState();
-    return this.isMuted;
+    return this.isMicMuted;
   }
 
   /**
-   * Toggle deafening (mute all remote voices)
+   * Toggle speaker / deafen (incoming audio only).
+   * Controls whether you hear other players. Does NOT mute your microphone!
    */
-  public toggleDeafen(): boolean {
+  public toggleSpeakerDeafen(): boolean {
     this.isDeafened = !this.isDeafened;
+    this.isSpeakerEnabled = !this.isDeafened;
+
     for (const peer of this.peers.values()) {
       peer.audioElement.muted = this.isDeafened;
     }
+
     soundManager.playUiClick();
     this.notifyState();
     return this.isDeafened;
   }
 
+  /**
+   * Create an RTCPeerConnection configured to receive remote audio,
+   * with transceiver direction 'sendrecv' if mic is active, or 'recvonly' if mic is off.
+   */
   private createPeerConnection(peerId: string): RTCPeerConnection {
     const config: RTCConfiguration = {
       iceServers: [
@@ -225,11 +369,14 @@ export class VoiceChatManager {
 
     const pc = new RTCPeerConnection(config);
 
-    // Add local audio tracks if microphone is active
-    if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => {
-        pc.addTrack(track, this.localStream!);
-      });
+    // If local stream exists, add track; otherwise add transceiver so incoming audio is always accepted
+    if (this.localStream && this.isMicActive) {
+      const audioTrack = this.localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        pc.addTrack(audioTrack, this.localStream);
+      }
+    } else {
+      pc.addTransceiver('audio', { direction: 'recvonly' });
     }
 
     // Send local ICE candidates to remote peer via WebSocket
@@ -242,19 +389,29 @@ export class VoiceChatManager {
       }
     };
 
-    // When remote audio track arrives, attach to audio element
+    // When remote audio track arrives, attach to audio element and play
     const remoteStream = new MediaStream();
     const audioEl = document.createElement('audio');
     audioEl.autoplay = true;
     audioEl.muted = this.isDeafened;
+    audioEl.setAttribute('playsinline', 'true');
     audioEl.srcObject = remoteStream;
 
     pc.ontrack = (event) => {
       event.streams[0]?.getTracks().forEach((t) => remoteStream.addTrack(t));
+      if (!this.isDeafened) {
+        audioEl.muted = false;
+        audioEl.play().catch((err) => {
+          if (err.name === 'NotAllowedError') {
+            this.autoplayBlocked = true;
+            this.notifyState();
+          }
+        });
+      }
     };
 
     this.getAudioContainer().appendChild(audioEl);
-    this.peers.set(peerId, { connection: pc, audioElement: audioEl, remoteStream });
+    this.peers.set(peerId, { id: peerId, connection: pc, audioElement: audioEl, remoteStream });
 
     return pc;
   }
@@ -277,8 +434,25 @@ export class VoiceChatManager {
     }
   }
 
+  private async renegotiatePeer(peer: VoicePeer) {
+    try {
+      const offer = await peer.connection.createOffer();
+      await peer.connection.setLocalDescription(offer);
+      this.mpManager.sendVoiceSignal(peer.id, {
+        type: 'offer',
+        sdp: offer.sdp,
+      });
+    } catch (err) {
+      console.warn('Renegotiation failed for peer', peer.id, err);
+    }
+  }
+
+  /**
+   * Handle incoming WebRTC signaling (offer, answer, candidate).
+   * Accepts offers EVEN IF local microphone is not enabled!
+   */
   private async handleIncomingSignal(senderId: string, signal: unknown) {
-    if (!this.isVoiceEnabled || !signal) return;
+    if (!signal) return;
     const sig = signal as Record<string, unknown>;
 
     try {
@@ -301,7 +475,7 @@ export class VoiceChatManager {
           sdp: answer.sdp,
         });
       } else if (sig.type === 'answer') {
-        if (peer) {
+        if (peer && peer.connection.signalingState !== 'stable') {
           await peer.connection.setRemoteDescription(
             new RTCSessionDescription({ type: 'answer', sdp: sig.sdp as string }),
           );
@@ -354,10 +528,12 @@ export class VoiceChatManager {
       let wasSpeaking = false;
 
       this.speechCheckInterval = window.setInterval(() => {
-        if (!this.analyser || this.isMuted) {
+        if (!this.analyser || this.isMicMuted || !this.isMicActive) {
           if (wasSpeaking) {
             wasSpeaking = false;
-            this.mpManager.sendVoiceStatus(this.isMuted, false);
+            this.mpManager.sendVoiceStatus(this.isMicMuted, false);
+            this.activeSpeakers.delete(this.mpManager.localPlayerId);
+            this.notifyState();
           }
           return;
         }
@@ -368,11 +544,11 @@ export class VoiceChatManager {
           sum += dataArray[i];
         }
         const avg = sum / dataArray.length;
-        const isSpeaking = avg > 28;
+        const isSpeaking = avg > 26;
 
         if (isSpeaking !== wasSpeaking) {
           wasSpeaking = isSpeaking;
-          this.mpManager.sendVoiceStatus(this.isMuted, isSpeaking);
+          this.mpManager.sendVoiceStatus(this.isMicMuted, isSpeaking);
           if (isSpeaking) {
             this.activeSpeakers.add(this.mpManager.localPlayerId);
           } else {
@@ -382,5 +558,12 @@ export class VoiceChatManager {
         }
       }, 150);
     } catch {}
+  }
+
+  public dispose() {
+    this.disableMicrophone();
+    for (const [id] of this.peers.entries()) {
+      this.removePeer(id);
+    }
   }
 }

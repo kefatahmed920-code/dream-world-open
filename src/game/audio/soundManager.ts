@@ -497,6 +497,91 @@ class SoundManager {
     source.start(now);
     source.stop(now + 2.3);
   }
+
+  // --- WATER & UNDERWATER SFX ---
+  private underwaterFilterNode: BiquadFilterNode | null = null;
+
+  public setUnderwater(underwater: boolean) {
+    this.resume();
+    if (!this.ctx || !this.masterGain) return;
+    const now = this.ctx.currentTime;
+
+    if (!this.underwaterFilterNode) {
+      this.underwaterFilterNode = this.ctx.createBiquadFilter();
+      this.underwaterFilterNode.type = 'lowpass';
+      this.underwaterFilterNode.frequency.setValueAtTime(20000, now);
+      // Insert in chain between sfx/ambient and master
+      this.sfxGain?.disconnect();
+      this.ambientGain?.disconnect();
+      this.sfxGain?.connect(this.underwaterFilterNode);
+      this.ambientGain?.connect(this.underwaterFilterNode);
+      this.underwaterFilterNode.connect(this.masterGain);
+    }
+
+    if (underwater) {
+      // Muffle high frequencies underwater (380 Hz lowpass)
+      this.underwaterFilterNode.frequency.setTargetAtTime(380, now, 0.15);
+    } else {
+      // Restore full audio fidelity upon surfacing
+      this.underwaterFilterNode.frequency.setTargetAtTime(20000, now, 0.15);
+    }
+  }
+
+  public playWaterSplash() {
+    this.resume();
+    if (!this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+
+    const noiseBuf = this.createNoiseBuffer(0.65);
+    if (!noiseBuf) return;
+
+    const source = this.ctx.createBufferSource();
+    source.buffer = noiseBuf;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(650, now);
+    filter.frequency.exponentialRampToValueAtTime(180, now + 0.55);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.35, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.sfxGain);
+
+    source.start(now);
+    source.stop(now + 0.62);
+  }
+
+  public playSwimStroke() {
+    this.resume();
+    if (!this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+
+    const noiseBuf = this.createNoiseBuffer(0.35);
+    if (!noiseBuf) return;
+
+    const source = this.ctx.createBufferSource();
+    source.buffer = noiseBuf;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(420, now);
+    filter.frequency.linearRampToValueAtTime(220, now + 0.3);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.18, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.sfxGain);
+
+    source.start(now);
+    source.stop(now + 0.34);
+  }
 }
 
 export const soundManager = new SoundManager();

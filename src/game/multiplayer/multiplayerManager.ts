@@ -150,6 +150,7 @@ export class MultiplayerManager {
   public onConnectionChanged?: (connected: boolean, playerCount: number, message?: string) => void;
   public onVoiceSignal?: (senderId: string, signal: unknown) => void;
   public onVoiceStatus?: (senderId: string, isMuted: boolean, isSpeaking: boolean) => void;
+  public onRoomJoined?: (room: string) => void;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -477,6 +478,7 @@ export class MultiplayerManager {
       if (typeof data.memberCount === 'number') {
         this.serverPlayerCount = data.memberCount;
       }
+      this.onRoomJoined?.(this.currentRoom);
 
       // Populate existing room players immediately
       if (Array.isArray(data.existingPlayers)) {

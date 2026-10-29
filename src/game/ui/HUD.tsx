@@ -15,6 +15,7 @@ import {
   Settings as SettingsIcon,
   Navigation,
   Gauge,
+  Trophy,
 } from 'lucide-react';
 import { PlayerStats } from '../types';
 import { ActiveVehicle } from '../vehicles/vehicleManager';
@@ -32,12 +33,19 @@ interface HUDProps {
   isSpeaking: boolean;
   unreadChatCount?: number;
   customWaypoint?: { x: number; z: number } | null;
+  autoplayBlocked?: boolean;
+  fps?: number;
+  frameTime?: number;
+  playerStance?: 'stand' | 'crouch' | 'prone' | 'swim';
+  isDiving?: boolean;
   onOpenMap: () => void;
   onOpenChat: () => void;
   onOpenPlayers: () => void;
   onOpenStats: () => void;
+  onOpenRankings?: () => void;
   onToggleVoice: () => void;
   onToggleDeafen: () => void;
+  onUnlockAudio?: () => void;
   onOpenSettings: () => void;
   onOpenInventory?: () => void;
 }
@@ -55,12 +63,19 @@ export const HUD: React.FC<HUDProps> = ({
   isSpeaking,
   unreadChatCount = 0,
   customWaypoint,
+  autoplayBlocked = false,
+  fps,
+  frameTime,
+  playerStance = 'stand',
+  isDiving = false,
   onOpenMap,
   onOpenChat,
   onOpenPlayers,
   onOpenStats,
+  onOpenRankings,
   onToggleVoice,
   onToggleDeafen,
+  onUnlockAudio,
   onOpenSettings,
 }) => {
   // Circular Mini-map calculations (Free Fire / PUBG radar scale)
@@ -89,6 +104,19 @@ export const HUD: React.FC<HUDProps> = ({
 
   return (
     <div className="absolute inset-0 pointer-events-none select-none z-10 flex flex-col justify-between overflow-hidden p-2 sm:p-3">
+      {/* Autoplay blocked banner for mobile audio unlock */}
+      {autoplayBlocked && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 pointer-events-auto">
+          <button
+            onClick={onUnlockAudio}
+            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-4 py-2 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce transition-all active:scale-95"
+          >
+            <Volume2 className="w-4 h-4" />
+            <span>Tap to enable voice audio</span>
+          </button>
+        </div>
+      )}
+
       {/* ========================================================
           TOP HEADER: MULTIPLAYER/VOICE/CHAT ICONS, COMPACT HEALTH BAR, CIRCULAR MINIMAP
           ======================================================== */}
@@ -110,11 +138,22 @@ export const HUD: React.FC<HUDProps> = ({
           {/* Statistics Button */}
           <button
             onClick={onOpenStats}
-            title="Game Stats & Leaderboard"
+            title="Game Stats & Server Metrics"
             className="w-9 h-9 rounded-2xl bg-slate-950/80 hover:bg-slate-900 border border-slate-700/80 shadow-xl flex items-center justify-center text-amber-400 active:scale-95 transition-all backdrop-blur-xs"
           >
             <BarChart2 className="w-4 h-4" />
           </button>
+
+          {/* Dual Player Rankings Button (Playtime & Competitive) */}
+          {onOpenRankings && (
+            <button
+              onClick={onOpenRankings}
+              title="Player Rankings (Playtime & Competitive)"
+              className="w-9 h-9 rounded-2xl bg-slate-950/80 hover:bg-slate-900 border border-amber-500/50 shadow-xl flex items-center justify-center text-amber-400 active:scale-95 transition-all backdrop-blur-xs"
+            >
+              <Trophy className="w-4 h-4 text-amber-400" />
+            </button>
+          )}
 
           {/* Real-time Voice Chat Mic Button */}
           <button
@@ -197,6 +236,30 @@ export const HUD: React.FC<HUDProps> = ({
                 className="bg-emerald-400 h-full rounded-full transition-all duration-150"
                 style={{ width: `${Math.max(0, Math.min(100, stats.stamina))}%` }}
               />
+            </div>
+
+            {/* Tactical Stance & Performance Chip */}
+            <div className="flex items-center justify-between text-[8px] font-bold tracking-tight text-slate-300 mt-0.5 px-0.5">
+              <span>
+                {playerStance === 'prone' ? (
+                  <span className="text-amber-400 font-extrabold uppercase">PRONE CRAWL</span>
+                ) : playerStance === 'crouch' ? (
+                  <span className="text-sky-400 font-extrabold uppercase">CROUCH</span>
+                ) : playerStance === 'swim' ? (
+                  <span className="text-cyan-400 font-extrabold uppercase">
+                    {isDiving || playerPos.y < -0.55
+                      ? `DIVING (${Math.abs(playerPos.y + 0.4).toFixed(1)}m)`
+                      : 'SWIMMING'}
+                  </span>
+                ) : (
+                  <span className="text-slate-400">STAND</span>
+                )}
+              </span>
+              {fps !== undefined && (
+                <span className="text-[8px] font-mono tabular-nums text-emerald-400 font-semibold">
+                  {fps} FPS{frameTime !== undefined ? ` · ${frameTime}ms` : ''}
+                </span>
+              )}
             </div>
           </div>
         </div>

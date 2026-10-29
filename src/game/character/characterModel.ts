@@ -794,83 +794,104 @@ export class CharacterRig {
       return;
     }
 
-    // 1. SWIMMING STANCE
+    // 1. SWIMMING STANCE (Belly-down horizontal in water)
     if (stance === 'swim') {
       this.contactShadow.visible = false;
-      // Body angled horizontally floating in river
+      this.pelvis.position.x = 0;
       this.pelvis.position.y = THREE.MathUtils.damp(this.pelvis.position.y, 0.45, 8, delta);
-      this.pelvis.rotation.x = THREE.MathUtils.damp(this.pelvis.rotation.x, -1.25, 8, delta);
-      this.head.rotation.x = THREE.MathUtils.damp(this.head.rotation.x, 0.85, 8, delta);
-      this.spineLower.rotation.x = THREE.MathUtils.damp(this.spineLower.rotation.x, 0.15, 8, delta);
 
       this.animPhase += delta * (3.5 + this.currentMoveSpeed * 6.0);
       const phase = this.animPhase;
 
       if (this.currentMoveSpeed < 0.05) {
-        // Treading water idle
+        // Treading water idle: partially upright body, gentle sculling
         const tread = Math.sin(phase * 1.5);
-        this.pelvis.position.y = 0.45 + tread * 0.04;
-        this.leftUpperArm.rotation.set(-0.35 + tread * 0.2, 0, 0.55 + tread * 0.15);
-        this.rightUpperArm.rotation.set(-0.35 + tread * 0.2, 0, -0.55 - tread * 0.15);
-        this.leftForearm.rotation.set(-0.4, 0, 0);
-        this.rightForearm.rotation.set(-0.4, 0, 0);
-        this.leftThigh.rotation.set(0.3 + tread * 0.25, 0, 0.1);
-        this.rightThigh.rotation.set(0.3 - tread * 0.25, 0, -0.1);
-        this.leftCalf.rotation.set(0.4, 0, 0);
-        this.rightCalf.rotation.set(0.4, 0, 0);
+        this.pelvis.rotation.x = THREE.MathUtils.damp(this.pelvis.rotation.x, 0.55, 6, delta);
+        this.head.rotation.x = THREE.MathUtils.damp(this.head.rotation.x, -0.35, 6, delta);
+        this.pelvis.position.y = 0.45 + tread * 0.03;
+        this.leftUpperArm.rotation.set(-0.25 + tread * 0.2, 0, 0.55 + tread * 0.15);
+        this.rightUpperArm.rotation.set(-0.25 + tread * 0.2, 0, -0.55 - tread * 0.15);
+        this.leftForearm.rotation.set(-0.35, 0, 0);
+        this.rightForearm.rotation.set(-0.35, 0, 0);
+        this.leftThigh.rotation.set(-0.2 + tread * 0.25, 0, 0.1);
+        this.rightThigh.rotation.set(-0.2 - tread * 0.25, 0, -0.1);
+        this.leftCalf.rotation.set(0.5, 0, 0);
+        this.rightCalf.rotation.set(0.5, 0, 0);
       } else {
-        // Active Swimming Crawl / Freestyle
-        // Alternating arm strokes
-        this.leftUpperArm.rotation.x = Math.sin(phase * 2.2) * 1.2 - 0.25;
-        this.rightUpperArm.rotation.x = Math.sin(phase * 2.2 + Math.PI) * 1.2 - 0.25;
-        this.leftUpperArm.rotation.z = 0.4 + Math.cos(phase * 2.2) * 0.35;
-        this.rightUpperArm.rotation.z = -0.4 - Math.cos(phase * 2.2 + Math.PI) * 0.35;
-        this.leftForearm.rotation.x = -0.5 + Math.sin(phase * 2.2) * 0.4;
-        this.rightForearm.rotation.x = -0.5 + Math.sin(phase * 2.2 + Math.PI) * 0.4;
+        // Active Swimming Crawl / Freestyle: fully horizontal, belly-down
+        this.pelvis.rotation.x = THREE.MathUtils.damp(this.pelvis.rotation.x, 1.40, 8, delta);
+        this.head.rotation.x = THREE.MathUtils.damp(this.head.rotation.x, -1.15, 8, delta);
+        this.spineLower.rotation.x = 0.08;
 
-        // Rapid flutter kicks
-        const kickL = Math.sin(phase * 3.8);
-        this.leftThigh.rotation.x = kickL * 0.4;
-        this.rightThigh.rotation.x = -kickL * 0.4;
-        this.leftCalf.rotation.x = Math.max(0, -kickL) * 0.5;
-        this.rightCalf.rotation.x = Math.max(0, kickL) * 0.5;
+        // Alternating arm strokes reaching forward
+        const stroke = phase * 2.4;
+        this.leftUpperArm.rotation.x = 0.65 + Math.sin(stroke) * 1.1;
+        this.rightUpperArm.rotation.x = 0.65 + Math.sin(stroke + Math.PI) * 1.1;
+        this.leftUpperArm.rotation.z = 0.35 + Math.cos(stroke) * 0.35;
+        this.rightUpperArm.rotation.z = -0.35 - Math.cos(stroke + Math.PI) * 0.35;
+        this.leftForearm.rotation.x = 0.6 + Math.sin(stroke) * 0.3;
+        this.rightForearm.rotation.x = 0.6 + Math.sin(stroke + Math.PI) * 0.3;
+
+        // Rapid flutter kicks extending behind
+        const kickL = Math.sin(phase * 4.2);
+        this.leftThigh.rotation.x = -kickL * 0.35;
+        this.rightThigh.rotation.x = kickL * 0.35;
+        this.leftCalf.rotation.x = Math.max(0, kickL) * 0.45;
+        this.rightCalf.rotation.x = Math.max(0, -kickL) * 0.45;
       }
       return;
     }
 
-    // 2. PRONE STANCE (Crawling along ground)
+    // 2. PRONE STANCE (Natural forward-facing, belly-down crawling)
     if (stance === 'prone') {
       this.contactShadow.visible = true;
-      this.pelvis.position.y = THREE.MathUtils.damp(this.pelvis.position.y, 0.18, 10, delta);
-      this.pelvis.rotation.x = THREE.MathUtils.damp(this.pelvis.rotation.x, -1.48, 8, delta);
-      this.head.rotation.x = THREE.MathUtils.damp(this.head.rotation.x, 0.95, 8, delta);
-      this.spineLower.rotation.x = 0.05;
-      this.spineUpper.rotation.x = 0.05;
+      // Pelvis at 0.14m above ground, belly facing down (+1.48 rad on X)
+      this.pelvis.position.y = THREE.MathUtils.damp(this.pelvis.position.y, 0.14, 10, delta);
+      this.pelvis.rotation.x = THREE.MathUtils.damp(this.pelvis.rotation.x, 1.48, 8, delta);
+      // Head raised forward looking in movement direction (-1.25 rad on X aligns head with ground horizontal)
+      this.head.rotation.x = THREE.MathUtils.damp(this.head.rotation.x, -1.25, 8, delta);
+      this.spineLower.rotation.x = 0.04;
+      this.spineUpper.rotation.x = 0.04;
 
-      this.animPhase += delta * (2.5 + this.currentMoveSpeed * 5.0);
+      this.animPhase += delta * (2.8 + this.currentMoveSpeed * 5.5);
       const phase = this.animPhase;
 
       if (this.currentMoveSpeed < 0.05) {
-        // Idle prone: flat on elbows looking forward
-        this.leftUpperArm.rotation.set(-1.1, 0, 0.35);
-        this.rightUpperArm.rotation.set(-1.1, 0, -0.35);
-        this.leftForearm.rotation.set(-0.7, 0, 0);
-        this.rightForearm.rotation.set(-0.7, 0, 0);
-        this.leftThigh.rotation.set(0.1, 0, 0.15);
-        this.rightThigh.rotation.set(0.1, 0, -0.15);
-        this.leftCalf.rotation.set(0.15, 0, 0);
-        this.rightCalf.rotation.set(0.15, 0, 0);
+        // Idle prone: belly-down, elbows on ground supporting chest, legs straight back
+        this.pelvis.position.x = 0;
+        this.leftUpperArm.rotation.set(0.75, 0.2, 0.35);
+        this.rightUpperArm.rotation.set(0.75, -0.2, -0.35);
+        this.leftForearm.rotation.set(0.85, 0, 0);
+        this.rightForearm.rotation.set(0.85, 0, 0);
+        this.leftThigh.rotation.set(-0.05, 0, 0.1);
+        this.rightThigh.rotation.set(-0.05, 0, -0.1);
+        this.leftCalf.rotation.set(0.2, 0, 0);
+        this.rightCalf.rotation.set(0.2, 0, 0);
+        this.leftFoot.rotation.set(-0.3, 0, 0);
+        this.rightFoot.rotation.set(-0.3, 0, 0);
       } else {
-        // Commando army crawl
-        const crawlL = Math.sin(phase * 2.0);
-        this.leftUpperArm.rotation.x = crawlL * 0.7 - 0.8;
-        this.rightUpperArm.rotation.x = -crawlL * 0.7 - 0.8;
-        this.leftForearm.rotation.x = -0.6;
-        this.rightForearm.rotation.x = -0.6;
-        this.leftThigh.rotation.x = Math.max(0, -crawlL) * 0.6;
-        this.rightThigh.rotation.x = Math.max(0, crawlL) * 0.6;
-        this.leftCalf.rotation.x = Math.max(0, -crawlL) * 0.7;
-        this.rightCalf.rotation.x = Math.max(0, crawlL) * 0.7;
+        // Commando army crawl: alternating elbow pull and knee push
+        const crawlCycle = Math.sin(phase * 2.2);
+        // Subtle natural pelvis serpentine sway
+        this.pelvis.position.x = Math.sin(phase * 2.2) * 0.03;
+
+        // Arms reach and drag forward
+        this.leftUpperArm.rotation.x = 0.75 + crawlCycle * 0.55;
+        this.rightUpperArm.rotation.x = 0.75 - crawlCycle * 0.55;
+        this.leftUpperArm.rotation.z = 0.35 + crawlCycle * 0.15;
+        this.rightUpperArm.rotation.z = -0.35 + crawlCycle * 0.15;
+        this.leftForearm.rotation.x = 0.85 + Math.max(0, crawlCycle) * 0.25;
+        this.rightForearm.rotation.x = 0.85 + Math.max(0, -crawlCycle) * 0.25;
+
+        // Legs: knee drives forward on the ground when pulling
+        this.leftThigh.rotation.x = Math.max(0, -crawlCycle) * 0.65;
+        this.rightThigh.rotation.x = Math.max(0, crawlCycle) * 0.65;
+        this.leftThigh.rotation.z = 0.15 + Math.max(0, -crawlCycle) * 0.25;
+        this.rightThigh.rotation.z = -0.15 - Math.max(0, crawlCycle) * 0.25;
+        this.leftCalf.rotation.x = 0.2 + Math.max(0, -crawlCycle) * 0.75;
+        this.rightCalf.rotation.x = 0.2 + Math.max(0, crawlCycle) * 0.75;
+        this.leftFoot.rotation.x = -0.3;
+        this.rightFoot.rotation.x = -0.3;
       }
       return;
     }

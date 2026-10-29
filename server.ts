@@ -140,6 +140,87 @@ function saveLeaderboard() {
   } catch {}
 }
 
+// ----------------------------------------------------
+// PLAYTIME & COMPETITIVE RANKINGS STORAGE
+// ----------------------------------------------------
+const PLAYTIME_FILE = path.join(DATA_DIR, 'playtime.json');
+const COMPETITIVE_FILE = path.join(DATA_DIR, 'competitive.json');
+
+interface ServerPlaytimeRecord {
+  uid: string;
+  name: string;
+  totalSeconds: number;
+  lastHeartbeat: number;
+  updatedAt: number;
+}
+
+interface ServerCompetitiveRecord {
+  uid: string;
+  name: string;
+  score: number;
+  level: number;
+  quests: number;
+  taka: number;
+  distanceKm: number;
+  updatedAt: number;
+}
+
+const defaultPlaytimeRecords: ServerPlaytimeRecord[] = [
+  { uid: 'u_sadia', name: 'Sadia_Rider', totalSeconds: 52365, lastHeartbeat: Date.now(), updatedAt: Date.now() }, // 14h 32m 45s
+  { uid: 'u_tanvir', name: 'Tanvir_Pro', totalSeconds: 43509, lastHeartbeat: Date.now(), updatedAt: Date.now() }, // 12h 05m 09s
+  { uid: 'u_afnan', name: 'Afnan_Dhaka', totalSeconds: 32676, lastHeartbeat: Date.now(), updatedAt: Date.now() }, // 9h 04m 36s
+  { uid: 'u_sami', name: 'Sami_Bandarban', totalSeconds: 21852, lastHeartbeat: Date.now(), updatedAt: Date.now() }, // 6h 04m 12s
+  { uid: 'u_farhan', name: 'Farhan_Explorer', totalSeconds: 15138, lastHeartbeat: Date.now(), updatedAt: Date.now() }, // 4h 12m 18s
+  { uid: 'u_nusrat', name: 'Nusrat_Chit', totalSeconds: 9876, lastHeartbeat: Date.now(), updatedAt: Date.now() }, // 2h 44m 36s
+  { uid: 'u_rifat', name: 'Rifat_Speed', totalSeconds: 5076, lastHeartbeat: Date.now(), updatedAt: Date.now() }, // 1h 24m 36s
+  { uid: 'u_ananya', name: 'Ananya_Dhaka', totalSeconds: 2538, lastHeartbeat: Date.now(), updatedAt: Date.now() }, // 42m 18s
+];
+
+let globalPlaytimeRecords: ServerPlaytimeRecord[] = [...defaultPlaytimeRecords];
+try {
+  if (fs.existsSync(PLAYTIME_FILE)) {
+    const raw = fs.readFileSync(PLAYTIME_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      globalPlaytimeRecords = parsed;
+    }
+  }
+} catch {}
+
+function savePlaytime() {
+  try {
+    fs.writeFileSync(PLAYTIME_FILE, JSON.stringify(globalPlaytimeRecords, null, 2), 'utf-8');
+  } catch {}
+}
+
+const defaultCompetitiveRecords: ServerCompetitiveRecord[] = [
+  { uid: 'u_tanvir', name: 'Tanvir_Pro', score: 18500, level: 24, quests: 18, taka: 45200, distanceKm: 42.5, updatedAt: Date.now() },
+  { uid: 'u_afnan', name: 'Afnan_Dhaka', score: 16200, level: 21, quests: 15, taka: 38900, distanceKm: 38.0, updatedAt: Date.now() },
+  { uid: 'u_sadia', name: 'Sadia_Rider', score: 14800, level: 19, quests: 14, taka: 31400, distanceKm: 34.2, updatedAt: Date.now() },
+  { uid: 'u_sami', name: 'Sami_Bandarban', score: 12900, level: 17, quests: 12, taka: 26800, distanceKm: 28.6, updatedAt: Date.now() },
+  { uid: 'u_farhan', name: 'Farhan_Explorer', score: 10800, level: 15, quests: 10, taka: 21500, distanceKm: 22.4, updatedAt: Date.now() },
+  { uid: 'u_nusrat', name: 'Nusrat_Chit', score: 9400, level: 14, quests: 9, taka: 18200, distanceKm: 19.1, updatedAt: Date.now() },
+  { uid: 'u_rifat', name: 'Rifat_Speed', score: 8100, level: 13, quests: 8, taka: 16500, distanceKm: 16.5, updatedAt: Date.now() },
+  { uid: 'u_ananya', name: 'Ananya_Dhaka', score: 6700, level: 11, quests: 7, taka: 14200, distanceKm: 12.0, updatedAt: Date.now() },
+];
+
+let globalCompetitiveRecords: ServerCompetitiveRecord[] = [...defaultCompetitiveRecords];
+try {
+  if (fs.existsSync(COMPETITIVE_FILE)) {
+    const raw = fs.readFileSync(COMPETITIVE_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      globalCompetitiveRecords = parsed;
+    }
+  }
+} catch {}
+
+function saveCompetitive() {
+  try {
+    fs.writeFileSync(COMPETITIVE_FILE, JSON.stringify(globalCompetitiveRecords, null, 2), 'utf-8');
+  } catch {}
+}
+
 // User Accounts Storage
 interface ServerUserRecord {
   uid: string;
@@ -590,6 +671,177 @@ app.post('/api/leaderboard', (req: Request, res: Response) => {
     success: true,
     entry: updatedEntry,
     leaderboard: globalLeaderboard,
+  });
+});
+
+// Helper for formatting seconds into string: e.g. "1h 24m 36s" or "42m 18s"
+function formatSeconds(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const remS = s % 60;
+  if (h > 0) {
+    return `${h}h ${m.toString().padStart(2, '0')}m ${remS.toString().padStart(2, '0')}s`;
+  }
+  return `${m}m ${remS.toString().padStart(2, '0')}s`;
+}
+
+// ----------------------------------------------------
+// DUAL RANKINGS API ENDPOINTS
+// ----------------------------------------------------
+
+// 1. Playtime Heartbeat (active gameplay time accumulation)
+app.post('/api/player/heartbeat', (req: Request, res: Response) => {
+  const { uid, name, activeSeconds } = req.body;
+  if (!name) {
+    res.status(400).json({ success: false, message: 'Name is required' });
+    return;
+  }
+
+  // Cap active seconds per heartbeat to prevent client manipulation (max 35s per ping)
+  const delta = Math.max(1, Math.min(35, Number(activeSeconds) || 30));
+  const cleanUid = String(uid || 'guest');
+  const cleanName = String(name).trim().substring(0, 24);
+
+  let record = globalPlaytimeRecords.find(
+    (r) => (cleanUid !== 'guest' && r.uid === cleanUid) || r.name.toLowerCase() === cleanName.toLowerCase()
+  );
+
+  if (!record) {
+    record = {
+      uid: cleanUid,
+      name: cleanName,
+      totalSeconds: delta,
+      lastHeartbeat: Date.now(),
+      updatedAt: Date.now(),
+    };
+    globalPlaytimeRecords.push(record);
+  } else {
+    record.totalSeconds += delta;
+    record.lastHeartbeat = Date.now();
+    record.updatedAt = Date.now();
+  }
+
+  savePlaytime();
+
+  res.json({
+    success: true,
+    totalSeconds: record.totalSeconds,
+    formattedTime: formatSeconds(record.totalSeconds),
+  });
+});
+
+// 2. Playtime Leaderboard
+app.get('/api/rankings/playtime', (req: Request, res: Response) => {
+  const queryUid = String(req.query.uid || '');
+  const queryName = String(req.query.name || '').toLowerCase();
+
+  // Sort descending by totalSeconds
+  const sorted = [...globalPlaytimeRecords].sort((a, b) => b.totalSeconds - a.totalSeconds);
+
+  const leaderboard = sorted.slice(0, 50).map((r, idx) => ({
+    rank: idx + 1,
+    uid: r.uid,
+    name: r.name,
+    totalSeconds: r.totalSeconds,
+    formattedTime: formatSeconds(r.totalSeconds),
+    isOnline: clients.has(r.uid) || Date.now() - r.lastHeartbeat < 90000,
+    isSelf: (queryUid && r.uid === queryUid) || (queryName && r.name.toLowerCase() === queryName),
+  }));
+
+  const leadingPlayer = leaderboard.length > 0 ? leaderboard[0] : null;
+  const selfEntry = leaderboard.find((p) => p.isSelf);
+
+  res.json({
+    success: true,
+    leaderboard,
+    leadingPlayer,
+    currentUser: selfEntry || null,
+  });
+});
+
+// 3. Competitive Ranking Update (Authoritative score calculation)
+app.post('/api/rankings/competitive/update', (req: Request, res: Response) => {
+  const { uid, name, level, quests, taka, distanceKm } = req.body;
+  if (!name) {
+    res.status(400).json({ success: false, message: 'Name is required' });
+    return;
+  }
+
+  const cleanUid = String(uid || 'guest');
+  const cleanName = String(name).trim().substring(0, 24);
+  const cleanLevel = Math.max(1, Number(level) || 1);
+  const cleanQuests = Math.max(0, Math.floor(Number(quests) || 0));
+  const cleanTaka = Math.max(0, Math.floor(Number(taka) || 0));
+  const cleanDist = Math.max(0, Number(distanceKm) || 0);
+
+  // Authoritative Competitive Scoring rule
+  const calculatedScore = Math.floor(
+    (cleanQuests * 500) + (cleanLevel * 250) + Math.floor(cleanTaka / 100) + Math.floor(cleanDist * 50) + 1200
+  );
+
+  let record = globalCompetitiveRecords.find(
+    (r) => (cleanUid !== 'guest' && r.uid === cleanUid) || r.name.toLowerCase() === cleanName.toLowerCase()
+  );
+
+  if (!record) {
+    record = {
+      uid: cleanUid,
+      name: cleanName,
+      score: calculatedScore,
+      level: cleanLevel,
+      quests: cleanQuests,
+      taka: cleanTaka,
+      distanceKm: cleanDist,
+      updatedAt: Date.now(),
+    };
+    globalCompetitiveRecords.push(record);
+  } else {
+    record.score = Math.max(record.score, calculatedScore);
+    record.level = Math.max(record.level, cleanLevel);
+    record.quests = Math.max(record.quests, cleanQuests);
+    record.taka = Math.max(record.taka, cleanTaka);
+    record.distanceKm = Math.max(record.distanceKm, cleanDist);
+    record.updatedAt = Date.now();
+  }
+
+  saveCompetitive();
+
+  res.json({
+    success: true,
+    score: record.score,
+    entry: record,
+  });
+});
+
+// 4. Competitive Leaderboard (Refreshed every 2 minutes by clients)
+app.get('/api/rankings/competitive', (req: Request, res: Response) => {
+  const queryUid = String(req.query.uid || '');
+  const queryName = String(req.query.name || '').toLowerCase();
+
+  const sorted = [...globalCompetitiveRecords].sort((a, b) => b.score - a.score || b.level - a.level);
+
+  const leaderboard = sorted.slice(0, 50).map((r, idx) => ({
+    rank: idx + 1,
+    uid: r.uid,
+    name: r.name,
+    score: r.score,
+    level: r.level,
+    quests: r.quests,
+    taka: r.taka,
+    isOnline: clients.has(r.uid) || Date.now() - r.updatedAt < 120000,
+    isSelf: (queryUid && r.uid === queryUid) || (queryName && r.name.toLowerCase() === queryName),
+  }));
+
+  const leadingPlayer = leaderboard.length > 0 ? leaderboard[0] : null;
+  const selfEntry = leaderboard.find((p) => p.isSelf);
+
+  res.json({
+    success: true,
+    leaderboard,
+    leadingPlayer,
+    currentUser: selfEntry || null,
+    updatedAt: Date.now(),
   });
 });
 

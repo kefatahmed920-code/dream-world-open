@@ -301,7 +301,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
                 <RunIcon />
               </button>
 
-              {/* Crouch Button */}
+              {/* Crouch Button (On-foot only) */}
               {!isSwimming && (
                 <button
                   onTouchStart={(e) => {
@@ -319,7 +319,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
                 </button>
               )}
 
-              {/* Prone Button */}
+              {/* Prone Button (On-foot only) */}
               {!isSwimming && (
                 <button
                   onTouchStart={(e) => {
@@ -336,20 +336,57 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
                   <ProneIcon />
                 </button>
               )}
+
+              {/* Dive Down Button (Swimming only) */}
+              {isSwimming && (
+                <button
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                    inputManager.virtualDive = true;
+                  }}
+                  onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    inputManager.virtualDive = false;
+                  }}
+                  className="w-14 h-14 rounded-2xl bg-cyan-700/90 border-2 border-cyan-300 text-white shadow-xl flex flex-col items-center justify-center active:scale-90 transition-all"
+                  title="Dive Down (C)"
+                >
+                  <span className="text-base font-black">⬇️</span>
+                  <span className="text-[9px] font-bold tracking-tight uppercase">DIVE</span>
+                </button>
+              )}
             </div>
 
-            {/* Bottom row: Primary Action Jump Button */}
+            {/* Bottom row: Primary Action Button (Surface when swimming, Jump when on land) */}
             <div className="flex items-center gap-3">
-              <button
-                onTouchStart={(e) => {
-                  e.stopPropagation();
-                  inputManager.virtualJump = true;
-                }}
-                className="w-16 h-16 rounded-3xl bg-emerald-500/90 hover:bg-emerald-400 text-slate-950 font-black border-2 border-emerald-300 shadow-2xl flex items-center justify-center active:scale-90 transition-transform shadow-emerald-500/30"
-                title="Jump / Stand Up (Space)"
-              >
-                <JumpIcon />
-              </button>
+              {isSwimming ? (
+                <button
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                    inputManager.virtualSurface = true;
+                  }}
+                  onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    inputManager.virtualSurface = false;
+                  }}
+                  className="w-16 h-16 rounded-3xl bg-teal-500/95 hover:bg-teal-400 text-slate-950 font-black border-2 border-teal-200 shadow-2xl flex flex-col items-center justify-center active:scale-90 transition-transform shadow-teal-500/30"
+                  title="Surface / Rise Up (Space)"
+                >
+                  <span className="text-lg font-black">⬆️</span>
+                  <span className="text-[10px] font-black uppercase tracking-wider">SURFACE</span>
+                </button>
+              ) : (
+                <button
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                    inputManager.virtualJump = true;
+                  }}
+                  className="w-16 h-16 rounded-3xl bg-emerald-500/90 hover:bg-emerald-400 text-slate-950 font-black border-2 border-emerald-300 shadow-2xl flex items-center justify-center active:scale-90 transition-transform shadow-emerald-500/30"
+                  title="Jump / Stand Up (Space)"
+                >
+                  <JumpIcon />
+                </button>
+              )}
             </div>
           </div>
         )}
