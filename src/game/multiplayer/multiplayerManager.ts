@@ -148,6 +148,8 @@ export class MultiplayerManager {
   public onPlayerLeft?: (name: string) => void;
   public onChatMessage?: (sender: string, text: string) => void;
   public onConnectionChanged?: (connected: boolean, playerCount: number, message?: string) => void;
+  public onVoiceSignal?: (senderId: string, signal: unknown) => void;
+  public onVoiceStatus?: (senderId: string, isMuted: boolean, isSpeaking: boolean) => void;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -399,6 +401,38 @@ export class MultiplayerManager {
     this.onChatMessage?.(this.localPlayerName, text);
   }
 
+  public sendVoiceSignal(targetId: string | null, signal: unknown) {
+    if (!this.isOnlineMode) return;
+    this.sendMessage({
+      type: 'voice-signal',
+      senderId: this.localPlayerId,
+      name: this.localPlayerName,
+      targetId,
+      signal,
+    });
+  }
+
+  public sendVoiceStatus(isMuted: boolean, isSpeaking: boolean) {
+    if (!this.isOnlineMode) return;
+    this.sendMessage({
+      type: 'voice-status',
+      senderId: this.localPlayerId,
+      name: this.localPlayerName,
+      isMuted,
+      isSpeaking,
+    });
+  }
+
+  public getConnectedPlayersList(): { id: string; name: string; isSelf: boolean; isOnline: boolean }[] {
+    const list = [
+      { id: this.localPlayerId, name: `${this.localPlayerName} (You)`, isSelf: true, isOnline: true },
+    ];
+    for (const [id, actor] of this.remotePlayers.entries()) {
+      list.push({ id, name: actor.name, isSelf: false, isOnline: true });
+    }
+    return list;
+  }
+
   public sendLocalState(
     position: THREE.Vector3,
     rotationY: number,
@@ -531,6 +565,18 @@ export class MultiplayerManager {
     // Handle Chat
     if (data.type === 'chat') {
       this.onChatMessage?.(name, data.text as string);
+      return;
+    }
+
+    // Handle Voice Signal (offer / answer / ice-candidate)
+    if (data.type === 'voice-signal') {
+      this.onVoiceSignal?.(senderId, data.signal);
+      return;
+    }
+
+    // Handle Voice Status (isMuted / isSpeaking)
+    if (data.type === 'voice-status') {
+      this.onVoiceStatus?.(senderId, !!data.isMuted, !!data.isSpeaking);
       return;
     }
 

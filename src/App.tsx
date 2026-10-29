@@ -26,6 +26,10 @@ import { ActiveNPC } from './game/character/npcManager';
 import { ActiveVehicle } from './game/vehicles/vehicleManager';
 import { Quest, PlayerStats, GameSettings, WeatherType } from './game/types';
 import { soundManager } from './game/audio/soundManager';
+import { ChatModal, ChatMessage } from './game/ui/ChatModal';
+import { PlayerListModal, PlayerInfo } from './game/ui/PlayerListModal';
+import { StatsModal } from './game/ui/StatsModal';
+import { NetworkConfig } from './game/config/networkConfig';
 import { Bell, X } from 'lucide-react';
 
 export default function App() {
@@ -45,6 +49,19 @@ export default function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isCharacterSelectOpen, setIsCharacterSelectOpen] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isPlayerListOpen, setIsPlayerListOpen] = useState(false);
+  const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [onlineCount, setOnlineCount] = useState(1);
+  const [isVoiceActive, setIsVoiceActive] = useState(false);
+  const [isMicMuted, setIsMicMuted] = useState(false);
+  const [isDeafened, setIsDeafened] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [connectedPlayers, setConnectedPlayers] = useState<PlayerInfo[]>([
+    { id: 'local', name: 'Explorer (You)', isSelf: true, isOnline: true },
+  ]);
   const [currentUser, setCurrentUser] = useState<PlayerAccount | null>(authManager.getCurrentUser());
   const [playerAppearance, setPlayerAppearance] = useState<CharacterAppearance>(() => {
     try {
@@ -114,7 +131,46 @@ export default function App() {
       onVehicleStateChanged: (veh) => setActiveVehicle(veh),
       onTimeUpdated: (t) => setTimeOfDay(t),
       onFPSUpdated: (val) => setFps(val),
+      onMultiplayerConnectionChanged: (_conn, count) => {
+        setOnlineCount(count);
+        if (engineRef.current) {
+          setConnectedPlayers(engineRef.current.multiplayerManager.getConnectedPlayersList());
+        }
+      },
+      onMultiplayerChatReceived: (sender, text) => {
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: Math.random().toString(36).slice(2, 9),
+            sender,
+            text,
+            time: timeStr,
+            isSelf: false,
+          },
+        ]);
+        setUnreadChatCount((prev) => prev + 1);
+        soundManager.playCollectCoin();
+      },
     });
+
+    engine.voiceChatManager.onStateChanged = (state) => {
+      setIsVoiceActive(state.enabled);
+      setIsMicMuted(state.muted);
+      setIsDeafened(state.deafened);
+      const isLocalSpeaking = state.speakers.includes(engine.multiplayerManager.localPlayerId);
+      setIsSpeaking(isLocalSpeaking);
+      if (state.error) {
+        showToast(state.error, 'VOICE CHAT');
+      }
+      setConnectedPlayers((prev) =>
+        prev.map((p) => ({
+          ...p,
+          isSpeaking: state.speakers.includes(p.id),
+          isMuted: p.isSelf ? state.muted : p.isMuted,
+        })),
+      );
+    };
 
     engineRef.current = engine;
     setActiveQuest(engine.questManager.getActiveQuest());
@@ -150,7 +206,10 @@ export default function App() {
           isAuthOpen ||
           isProfileOpen ||
           isCharacterSelectOpen ||
-          isLeaderboardOpen
+          isLeaderboardOpen ||
+          isChatOpen ||
+          isPlayerListOpen ||
+          isStatsOpen
         ) {
           setActiveDialogueNPC(null);
           setIsMapOpen(false);
@@ -162,6 +221,9 @@ export default function App() {
           setIsProfileOpen(false);
           setIsCharacterSelectOpen(false);
           setIsLeaderboardOpen(false);
+          setIsChatOpen(false);
+          setIsPlayerListOpen(false);
+          setIsStatsOpen(false);
         } else {
           setIsSettingsOpen((prev) => !prev);
         }
@@ -178,17 +240,67 @@ export default function App() {
       engine.dispose();
       engineRef.current = null;
     };
-  }, [showToast]);
+  }, [showToast, isChatOpen, isPlayerListOpen, isStatsOpen]);
 
   const handleStartGame = (mode: 'single' | 'multiplayer') => {
     setGameState('playing');
     // Automatically connect to the production multiplayer backend on start
     engineRef.current?.multiplayerManager.startOnlineMultiplayer();
+
+    // Register active game play session with server
+    fetch(NetworkConfig.getApiUrl('/api/sessions/start'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: currentUser?.uid || engineRef.current?.multiplayerManager.localPlayerId,
+        name: currentUser?.displayName || engineRef.current?.multiplayerManager.localPlayerName,
+      }),
+    }).catch(() => {});
+
     if (mode === 'multiplayer') {
       showToast('Connected to Online Multiplayer! Other players will appear nearby.', 'ONLINE CO-OP');
     } else {
       showToast('Welcome to Bangladesh Open World! Connected to Dhaka Hub.', 'ADVENTURE BEGUN');
     }
+  };
+
+  const handleToggleVoice = async () => {
+    if (!engineRef.current) return;
+    const vm = engineRef.current.voiceChatManager;
+    if (!vm.isVoiceEnabled) {
+      const ok = await vm.enableVoiceChat();
+      if (ok) {
+        showToast('Microphone live. Voice chat connected!', 'VOICE CHAT');
+      }
+    } else {
+      const muted = vm.toggleMute();
+      showToast(muted ? 'Microphone muted' : 'Microphone unmuted', 'VOICE CHAT');
+    }
+  };
+
+  const handleToggleDeafen = () => {
+    if (!engineRef.current) return;
+    const deafened = engineRef.current.voiceChatManager.toggleDeafen();
+    showToast(
+      deafened ? 'Audio deafened (remote voices muted)' : 'Voice audio restored',
+      'VOICE AUDIO',
+    );
+  };
+
+  const handleSendMessage = (text: string) => {
+    if (!engineRef.current) return;
+    engineRef.current.multiplayerManager.sendChat(text);
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(36).slice(2, 9),
+        sender: engineRef.current?.multiplayerManager.localPlayerName || 'You',
+        text,
+        time: timeStr,
+        isSelf: true,
+      },
+    ]);
   };
 
   const handleTeleport = (x: number, z: number) => {
@@ -247,22 +359,28 @@ export default function App() {
         <>
           <HUD
             stats={playerStats}
-            activeQuest={activeQuest}
             activeVehicle={activeVehicle}
             interactionPrompt={interactionPrompt}
-            timeOfDay={timeOfDay}
             playerPos={playerPos}
             playerYaw={playerYaw}
-            fps={fps}
+            onlineCount={onlineCount}
+            isVoiceActive={isVoiceActive}
+            isMicMuted={isMicMuted}
+            isDeafened={isDeafened}
+            isSpeaking={isSpeaking}
+            unreadChatCount={unreadChatCount}
             customWaypoint={customWaypoint}
             onOpenMap={() => setIsMapOpen(true)}
-            onOpenInventory={() => setIsInventoryOpen(true)}
+            onOpenChat={() => {
+              setIsChatOpen(true);
+              setUnreadChatCount(0);
+            }}
+            onOpenPlayers={() => setIsPlayerListOpen(true)}
+            onOpenStats={() => setIsStatsOpen(true)}
+            onToggleVoice={handleToggleVoice}
+            onToggleDeafen={handleToggleDeafen}
             onOpenSettings={() => setIsSettingsOpen(true)}
-            onOpenMultiplayer={() => setIsMultiplayerOpen(true)}
-            onOpenInstallModal={() => setIsInstallModalOpen(true)}
-            onOpenProfile={() => setIsProfileOpen(true)}
-            onOpenCharacterSelect={() => setIsCharacterSelectOpen(true)}
-            onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
+            onOpenInventory={() => setIsInventoryOpen(true)}
           />
 
           {/* On-Screen Mobile Joystick & Tactical HUD Controls */}
@@ -406,6 +524,33 @@ export default function App() {
         currentUser={currentUser}
         onClose={() => setIsLeaderboardOpen(false)}
       />
+
+      {/* Real-time Room Text Chat Modal */}
+      {isChatOpen && (
+        <ChatModal
+          messages={chatMessages}
+          onSendMessage={handleSendMessage}
+          onClose={() => setIsChatOpen(false)}
+        />
+      )}
+
+      {/* Online Room Players Modal */}
+      {isPlayerListOpen && (
+        <PlayerListModal
+          roomName={engineRef.current?.multiplayerManager.currentRoom || 'Dhaka-Hub-1'}
+          players={connectedPlayers}
+          onClose={() => setIsPlayerListOpen(false)}
+        />
+      )}
+
+      {/* Game Statistics & Leaderboard Modal */}
+      {isStatsOpen && (
+        <StatsModal
+          playerStats={playerStats}
+          onlineCount={onlineCount}
+          onClose={() => setIsStatsOpen(false)}
+        />
+      )}
     </div>
   );
 }

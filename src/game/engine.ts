@@ -15,6 +15,7 @@ import { CameraController } from './camera/cameraController';
 import { InputManager } from './controls/inputManager';
 import { soundManager } from './audio/soundManager';
 import { MultiplayerManager } from './multiplayer/multiplayerManager';
+import { VoiceChatManager } from './multiplayer/voiceChatManager';
 import { GameSettings, SavedGameState } from './types';
 
 export interface GameEngineCallbacks {
@@ -45,6 +46,7 @@ export class GameEngine {
   public cameraController: CameraController;
   public inputManager: InputManager;
   public multiplayerManager: MultiplayerManager;
+  public voiceChatManager: VoiceChatManager;
 
   // Player Physics & Locomotion State
   public playerVelocity = new THREE.Vector3();
@@ -159,8 +161,9 @@ export class GameEngine {
     this.cameraController = new CameraController(this.camera);
     this.inputManager = new InputManager(this.renderer.domElement);
 
-    // Real-Time Online Multiplayer Manager
+    // Real-Time Online Multiplayer & WebRTC Voice Chat
     this.multiplayerManager = new MultiplayerManager(this.scene);
+    this.voiceChatManager = new VoiceChatManager(this.multiplayerManager);
     this.multiplayerManager.onConnectionChanged = (connected, count) => {
       this.callbacks.onMultiplayerConnectionChanged?.(connected, count);
     };
@@ -647,6 +650,7 @@ export class GameEngine {
   public dispose() {
     this.stop();
     window.removeEventListener('resize', this.handleResize);
+    this.voiceChatManager.disableVoiceChat();
     this.multiplayerManager.dispose();
     try {
       this.renderer.dispose();

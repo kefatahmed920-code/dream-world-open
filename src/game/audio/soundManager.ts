@@ -408,6 +408,27 @@ class SoundManager {
     osc.stop(now + 0.22);
   }
 
+  public playCollectCoin() {
+    this.playCollectItem();
+  }
+
+  public playRadioBeep(on = true) {
+    this.resume();
+    if (!this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(on ? 880 : 440, now);
+    osc.frequency.setValueAtTime(on ? 1200 : 330, now + 0.05);
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.11);
+  }
+
   public playVehicleDoor() {
     this.resume();
     if (!this.ctx || !this.sfxGain) return;
