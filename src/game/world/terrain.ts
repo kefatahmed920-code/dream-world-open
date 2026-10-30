@@ -4,6 +4,7 @@
  */
 
 import * as THREE from 'three';
+import { KaifengBridgeAndRiver } from './KaifengBridgeAndRiver';
 
 export interface WorldObstacle {
   minX: number;
@@ -379,6 +380,7 @@ export class WorldTerrain {
   public waterfallMesh: THREE.Mesh | null = null;
   public riverMesh: THREE.Mesh | null = null;
   public riverWaterTex: THREE.CanvasTexture | null = null;
+  public kaifengBridge!: KaifengBridgeAndRiver;
 
   private waterfallTexOffset = 0;
   private riverTexOffset = 0;
@@ -399,24 +401,21 @@ export class WorldTerrain {
   /**
    * Continuous Analytical Height Function
    * Provides rock-solid y-elevation for player, vehicles, NPCs, and camera collision.
-   * Supports vertical layer awareness via currentY (e.g. flyover overpass vs lower road).
    */
   public getTerrainHeight(x: number, z: number, currentY?: number): number {
-    // 1. Classical Chinese Pavilion Bridge across Padma River (X: 50 to 125, Z centered at 3, widened 18m deck: Z from -6.5 to 12.5)
-    if (x >= 50 && x <= 125 && z >= -6.5 && z <= 12.5) {
-      // West approach ramp (X: 50 -> 65): ascends smoothly from city avenue 0.03 to bridge deck 4.2
-      if (x < 65) {
-        return THREE.MathUtils.lerp(0.03, 4.2, (x - 50) / 15);
-      }
-      // East approach ramp (X: 110 -> 125): descends smoothly from bridge deck 4.2 to village road 0.5
-      else if (x > 110) {
-        return THREE.MathUtils.lerp(4.2, 0.5, (x - 110) / 15);
-      }
-      // Main Bridge Span deck: solid 4.2m elevation
-      return 4.2;
+    // 1. Authentic Chinese Kaifeng Rainbow Moon Arch Bridge (汴京虹桥)
+    const bridgeH = this.kaifengBridge.getBridgeElevation(x, z);
+    if (bridgeH !== null) {
+      return bridgeH;
     }
 
-    // 2. Modern Pedestrian Foot-Overbridge across Dhanmondi City Avenue (at X = 0, deck Y = 5.2)
+    // 2. Wooden Fishing Pier & Boat Dock
+    const pierH = this.kaifengBridge.getPierElevation(x, z);
+    if (pierH !== null) {
+      return pierH;
+    }
+
+    // 3. Small Modern Pedestrian Foot-Overbridge across Dhanmondi City Avenue (at X = 0, deck Y = 5.2)
     // Multi-level height: lower roadway passes underneath freely at 0.03; pedestrians on stairs/deck climb to 5.2
     if (currentY !== undefined && currentY > 1.2) {
       // Overbridge Main Walkway Deck (X: -1.8 to 1.8, Z: -8.8 to 14.8)
@@ -431,29 +430,6 @@ export class WorldTerrain {
       if (z >= -10.4 && z <= -7.2 && x >= 0.0 && x <= 8.5) {
         return THREE.MathUtils.lerp(5.2, 0.16, x / 8.5);
       }
-    }
-
-    // 3. City Flyover Expressway (Elevated highway along X: -40 to -30, Z: -100 to 30)
-    if (x >= -40 && x <= -30 && z >= -100 && z <= 30) {
-      // Lower road underpass corridor (Main East-West Avenue at Z: -10 to +16)
-      if (z >= -10 && z <= 16) {
-        // If entity is at lower road level (or unspecified default), they drive smoothly under the flyover!
-        if (currentY === undefined || currentY < 4.5) {
-          return 0.03; // Lower city avenue roadway
-        }
-        return 7.5; // Upper flyover deck
-      }
-
-      // North flyover approach ramp (Z: -100 -> -80): ascends from 0.0 to 7.5
-      if (z < -80) {
-        return THREE.MathUtils.lerp(0.0, 7.5, (z - -100) / 20);
-      }
-      // South flyover approach ramp (Z: 16 -> 30): descends from 7.5 to 0.0
-      else if (z > 16) {
-        return THREE.MathUtils.lerp(7.5, 0.0, (z - 16) / 14);
-      }
-      // Flyover elevated expressway deck
-      return 7.5;
     }
 
     // 3. Wide River Channel (outside the bridge deck)
@@ -682,404 +658,16 @@ export class WorldTerrain {
     eastFoam.position.set(111.8, -0.36, 0);
     this.group.add(eastFoam);
 
-    // Common Materials for Chinese Bridge Architecture
-    const roadTex = createRoadTexture();
-    const bridgeRoadMat = new THREE.MeshStandardMaterial({
-      map: roadTex,
-      roughness: 0.7,
-      metalness: 0.15,
-    });
+    // 2. Authentic Chinese Kaifeng Rainbow Moon Arch Bridge & River System
+    this.kaifengBridge = new KaifengBridgeAndRiver();
+    this.group.add(this.kaifengBridge.group);
+    this.obstacles.push(...this.kaifengBridge.obstacles);
 
-    const graniteStoneMat = new THREE.MeshStandardMaterial({
-      color: 0x64748b, // Weathered grey river granite
-      roughness: 0.85,
-      metalness: 0.1,
-    });
 
-    const vermilionMat = new THREE.MeshStandardMaterial({
-      color: 0xb91c1c, // Imperial Vermilion Red Timber
-      roughness: 0.5,
-      metalness: 0.1,
-    });
 
-    const darkVermilionMat = new THREE.MeshStandardMaterial({
-      color: 0x7f1d1d, // Deep Cinnabar Red
-      roughness: 0.6,
-    });
 
-    const roofSlateMat = new THREE.MeshStandardMaterial({
-      color: 0x1e293b, // Deep Charcoal/Slate Glazed Ceramic Tiles
-      roughness: 0.4,
-      metalness: 0.2,
-    });
 
-    const goldAccentMat = new THREE.MeshStandardMaterial({
-      color: 0xf59e0b, // Imperial Gold Leaf Accent
-      roughness: 0.3,
-      metalness: 0.8,
-    });
 
-    const lanternGlowMat = new THREE.MeshStandardMaterial({
-      color: 0xef4444, // Glowing Red Silk Lantern
-      emissive: 0xd97706,
-      emissiveIntensity: 0.6,
-      roughness: 0.3,
-    });
-
-    // 2. Main Bridge Deck Span (X: 65 to 110, widened 18m deck, deck top Y = 4.2)
-    const spanLength = 45;
-    const spanWidth = 18;
-    const deckThickness = 0.9;
-    const mainDeckGeo = new THREE.BoxGeometry(spanLength, deckThickness, spanWidth);
-    const mainDeck = new THREE.Mesh(mainDeckGeo, bridgeRoadMat);
-    mainDeck.position.set(87.5, 3.75, 3);
-    mainDeck.castShadow = true;
-    mainDeck.receiveShadow = true;
-    this.group.add(mainDeck);
-
-    // Granite Stone Fascia Edges on both sides of deck
-    [-1, 1].forEach((sideZ) => {
-      const edgeGeo = new THREE.BoxGeometry(spanLength, 1.1, 0.4);
-      const edge = new THREE.Mesh(edgeGeo, graniteStoneMat);
-      edge.position.set(87.5, 3.75, 3 + sideZ * 9.1);
-      edge.castShadow = true;
-      this.group.add(edge);
-    });
-
-    // 3. West Approach Ramp (X: 50 to 65, sloped connecting City Avenue at 0.03 to Deck at 4.2)
-    const rampLength = 15;
-    const westRampGeo = new THREE.BoxGeometry(rampLength, deckThickness, spanWidth);
-    const westRamp = new THREE.Mesh(westRampGeo, bridgeRoadMat);
-    // Slope angle: rise 4.17m over 15m run
-    const westRampAngle = Math.atan2(4.17, rampLength);
-    westRamp.rotation.z = -westRampAngle;
-    westRamp.position.set(57.5, 2.1, 3);
-    westRamp.castShadow = true;
-    westRamp.receiveShadow = true;
-    this.group.add(westRamp);
-
-    // West Stone Retaining Abutment Walls
-    [-1, 1].forEach((sideZ) => {
-      const wallGeo = new THREE.BoxGeometry(rampLength, 3.5, 0.6);
-      const wall = new THREE.Mesh(wallGeo, graniteStoneMat);
-      wall.position.set(57.5, 1.2, 3 + sideZ * 9.2);
-      wall.castShadow = true;
-      this.group.add(wall);
-    });
-
-    // 4. East Approach Ramp (X: 110 to 125, sloped connecting Deck at 4.2 to Village Road at 0.5)
-    const eastRampGeo = new THREE.BoxGeometry(rampLength, deckThickness, spanWidth);
-    const eastRamp = new THREE.Mesh(eastRampGeo, bridgeRoadMat);
-    const eastRampAngle = Math.atan2(3.7, rampLength);
-    eastRamp.rotation.z = eastRampAngle;
-    eastRamp.position.set(117.5, 2.35, 3);
-    eastRamp.castShadow = true;
-    eastRamp.receiveShadow = true;
-    this.group.add(eastRamp);
-
-    // East Stone Retaining Abutment Walls
-    [-1, 1].forEach((sideZ) => {
-      const wallGeo = new THREE.BoxGeometry(rampLength, 3.5, 0.6);
-      const wall = new THREE.Mesh(wallGeo, graniteStoneMat);
-      wall.position.set(117.5, 1.2, 3 + sideZ * 9.2);
-      wall.castShadow = true;
-      this.group.add(wall);
-    });
-
-    // 5. Classical Chinese Stone Masonry Piers with Pointed Cutwaters (分水尖)
-    // 3 Piers in the river: X = 74, 87.5, 101. Riverbed at -3.2, Deck bottom at 3.3 (Height = 6.5m)
-    const pierXPositions = [74, 87.5, 101];
-    pierXPositions.forEach((px) => {
-      const pierGroup = new THREE.Group();
-      pierGroup.position.set(px, 0.05, 3);
-
-      // Main Pier Shaft
-      const pierBodyGeo = new THREE.BoxGeometry(3.8, 6.5, 20.5);
-      const pierBody = new THREE.Mesh(pierBodyGeo, graniteStoneMat);
-      pierBody.castShadow = true;
-      pierBody.receiveShadow = true;
-      pierGroup.add(pierBody);
-
-      // Stepped Corbel Stone Brackets (斗拱式石托) under the deck
-      const corbelGeo1 = new THREE.BoxGeometry(5.2, 0.7, 20.5);
-      const corbel1 = new THREE.Mesh(corbelGeo1, graniteStoneMat);
-      corbel1.position.y = 3.0;
-      corbel1.castShadow = true;
-      pierGroup.add(corbel1);
-
-      // Triangular Pointed Cutwaters (分水尖) at North (Upstream) and South (Downstream) ends
-      [-1, 1].forEach((dirZ) => {
-        const cutwaterGeo = new THREE.CylinderGeometry(0.1, 1.9, 6.5, 3);
-        cutwaterGeo.rotateY(dirZ > 0 ? Math.PI : 0);
-        const cutwater = new THREE.Mesh(cutwaterGeo, graniteStoneMat);
-        cutwater.position.set(0, 0, dirZ * 11.2);
-        cutwater.castShadow = true;
-        pierGroup.add(cutwater);
-      });
-
-      this.group.add(pierGroup);
-    });
-
-    // 6. Classical Red & Gold Railings (朱红雕花栏杆) with Obstacle Collisions
-    // Spans the entire bridge length from X = 50 to 125 along both sides
-    [-1, 1].forEach((sideZ) => {
-      const railZ = 3 + sideZ * 8.9;
-
-      // Base Granite Curb
-      const curbGeo = new THREE.BoxGeometry(75, 0.35, 0.4);
-      const curb = new THREE.Mesh(curbGeo, graniteStoneMat);
-      curb.position.set(87.5, 4.35, railZ);
-      curb.castShadow = true;
-      this.group.add(curb);
-
-      // Vermilion Timber Top Rail
-      const topRailGeo = new THREE.BoxGeometry(75, 0.16, 0.25);
-      const topRail = new THREE.Mesh(topRailGeo, vermilionMat);
-      topRail.position.set(87.5, 5.25, railZ);
-      topRail.castShadow = true;
-      this.group.add(topRail);
-
-      // Geometric Lattice Panel (花窗栏板)
-      const panelGeo = new THREE.BoxGeometry(75, 0.65, 0.12);
-      const panel = new THREE.Mesh(panelGeo, darkVermilionMat);
-      panel.position.set(87.5, 4.85, railZ);
-      this.group.add(panel);
-
-      // Classical Timber Posts with Gold Lotus-Bud Finials (莲花柱头)
-      for (let px = 51; px <= 124; px += 3.0) {
-        const postGeo = new THREE.BoxGeometry(0.24, 1.1, 0.24);
-        const post = new THREE.Mesh(postGeo, vermilionMat);
-        post.position.set(px, 4.85, railZ);
-        post.castShadow = true;
-        this.group.add(post);
-
-        const finialGeo = new THREE.SphereGeometry(0.12, 8, 8);
-        const finial = new THREE.Mesh(finialGeo, goldAccentMat);
-        finial.position.set(px, 5.45, railZ);
-        this.group.add(finial);
-      }
-
-      // Solid Safety Obstacle Boundary (prevents vehicles & players falling into river)
-      this.obstacles.push({
-        minX: 50,
-        maxX: 125,
-        minZ: railZ - 0.4,
-        maxZ: railZ + 0.4,
-        height: 6.0,
-        minY: 3.5,
-        maxY: 7.0,
-      });
-    });
-
-    // 7. Twin Imperial Entrance Paifang Gateways (牌坊)
-    // West Gateway at X = 65, East Gateway at X = 110
-    // VEHICLE CLEARANCE: Main lintel at Y = 10.2 (Clearance = 6.0m above 4.2m deck)
-    // Road opening width = 18.6m (columns at Z = -6.3 and Z = 12.3)
-    [65, 110].forEach((gateX) => {
-      const gateGroup = new THREE.Group();
-      gateGroup.position.set(gateX, 4.2, 3);
-
-      // 4 Vermilion Timber Columns (2 Inner flanking the 18m road, 2 Outer)
-      const columnPositionsZ = [-9.3, -6.3, 12.3, 15.3];
-      columnPositionsZ.forEach((colZ, idx) => {
-        const isInner = idx === 1 || idx === 2;
-        const colHeight = isInner ? 6.5 : 5.0;
-
-        // White Granite Stone Column Base (抱鼓石)
-        const baseGeo = new THREE.BoxGeometry(0.9, 0.8, 0.9);
-        const base = new THREE.Mesh(baseGeo, graniteStoneMat);
-        base.position.set(0, 0.4, colZ);
-        base.castShadow = true;
-        gateGroup.add(base);
-
-        // Vermilion Lacquer Timber Column
-        const colGeo = new THREE.CylinderGeometry(0.32, 0.35, colHeight, 12);
-        const col = new THREE.Mesh(colGeo, vermilionMat);
-        col.position.set(0, 0.8 + colHeight / 2, colZ);
-        col.castShadow = true;
-        gateGroup.add(col);
-
-        // Gold Column Ring Capitals
-        const capGeo = new THREE.CylinderGeometry(0.42, 0.38, 0.25, 12);
-        const cap = new THREE.Mesh(capGeo, goldAccentMat);
-        cap.position.set(0, 0.8 + colHeight, colZ);
-        gateGroup.add(cap);
-      });
-
-      // Main Crossbeam Lintel (额枋) across the 18m roadway at Y = 6.0 above deck (World Y = 10.2)
-      const mainBeamGeo = new THREE.BoxGeometry(1.0, 0.55, 19.6);
-      const mainBeam = new THREE.Mesh(mainBeamGeo, vermilionMat);
-      mainBeam.position.set(0, 6.0, 3);
-      mainBeam.castShadow = true;
-      gateGroup.add(mainBeam);
-
-      // Stepped Dougang Bracket Sets (斗栱)
-      const bracketGeo = new THREE.BoxGeometry(1.4, 0.35, 20.2);
-      const bracket = new THREE.Mesh(bracketGeo, goldAccentMat);
-      bracket.position.set(0, 6.35, 3);
-      gateGroup.add(bracket);
-
-      // Central Imperial Plaque / Tablet (匾额)
-      const plaqueGeo = new THREE.BoxGeometry(0.8, 0.65, 3.2);
-      const plaque = new THREE.Mesh(plaqueGeo, darkVermilionMat);
-      plaque.position.set(0, 5.5, 3);
-      gateGroup.add(plaque);
-
-      const plaqueGoldBorder = new THREE.Mesh(
-        new THREE.BoxGeometry(0.85, 0.72, 3.3),
-        goldAccentMat,
-      );
-      plaqueGoldBorder.position.set(0, 5.5, 3);
-      gateGroup.add(plaqueGoldBorder);
-
-      // Sweeping Curved Pagoda Eaves (飞檐) over Main Road
-      // Bottom roof tier
-      const roofBottomGeo = new THREE.BoxGeometry(2.4, 0.35, 21.5);
-      const roofBottom = new THREE.Mesh(roofBottomGeo, roofSlateMat);
-      roofBottom.position.set(0, 6.65, 3);
-      roofBottom.castShadow = true;
-      gateGroup.add(roofBottom);
-
-      // Flared swept-up hip rafter eaves (飞檐角) on both outer corners
-      [-1, 1].forEach((dirZ) => {
-        const flareGeo = new THREE.ConeGeometry(0.8, 1.4, 4);
-        flareGeo.rotateZ(Math.PI / 4);
-        flareGeo.rotateY(dirZ > 0 ? 0 : Math.PI);
-        const flare = new THREE.Mesh(flareGeo, roofSlateMat);
-        flare.position.set(0, 7.1, 3 + dirZ * 11.2);
-        gateGroup.add(flare);
-      });
-
-      // Upper Roof Tier
-      const roofTopGeo = new THREE.BoxGeometry(1.8, 0.45, 11.0);
-      const roofTop = new THREE.Mesh(roofTopGeo, roofSlateMat);
-      roofTop.position.set(0, 7.1, 3);
-      roofTop.castShadow = true;
-      gateGroup.add(roofTop);
-
-      // Golden Ridge Finials (吻兽 / 宝顶)
-      const ridgeFinialGeo = new THREE.CylinderGeometry(0.08, 0.25, 0.8, 8);
-      const ridgeFinial = new THREE.Mesh(ridgeFinialGeo, goldAccentMat);
-      ridgeFinial.position.set(0, 7.7, 3);
-      gateGroup.add(ridgeFinial);
-
-      this.group.add(gateGroup);
-    });
-
-    // 8. Twin Mid-Span Moon-Viewing Pagoda Pavilions (望月亭)
-    // Positioned at X = 87.5 on cantilevered stone side balconies:
-    // North Balcony at Z = 12.0 (outside road Z = 10 to 14.5)
-    // South Balcony at Z = -6.0 (outside road Z = -4 to -8.5)
-    // Central 14-meter roadway remains 100% OPEN for vehicles!
-    [-1, 1].forEach((sideZ) => {
-      const pavZ = 3 + sideZ * 9.2;
-      const pavGroup = new THREE.Group();
-      pavGroup.position.set(87.5, 4.2, pavZ);
-
-      // Cantilevered Stone Balcony Platform
-      const platGeo = new THREE.BoxGeometry(8.5, 0.6, 5.2);
-      const plat = new THREE.Mesh(platGeo, graniteStoneMat);
-      plat.position.set(0, -0.3, 0);
-      plat.castShadow = true;
-      plat.receiveShadow = true;
-      pavGroup.add(plat);
-
-      // Classical Balcony Railings
-      const balRailGeo = new THREE.BoxGeometry(8.5, 0.8, 0.2);
-      const balRail = new THREE.Mesh(balRailGeo, vermilionMat);
-      balRail.position.set(0, 0.4, sideZ * 2.4);
-      pavGroup.add(balRail);
-
-      // 6 Vermilion Lacquer Pillars for Octagonal Pagoda Pavilion
-      const pillarAngles = [0, Math.PI / 3, (2 * Math.PI) / 3, Math.PI, (4 * Math.PI) / 3, (5 * Math.PI) / 3];
-      const radius = 2.2;
-      pillarAngles.forEach((ang) => {
-        const px = Math.cos(ang) * radius;
-        const pz = Math.sin(ang) * (radius * 0.85);
-
-        const pillarGeo = new THREE.CylinderGeometry(0.18, 0.2, 3.8, 10);
-        const pillar = new THREE.Mesh(pillarGeo, vermilionMat);
-        pillar.position.set(px, 1.9, pz);
-        pillar.castShadow = true;
-        pavGroup.add(pillar);
-
-        // Hanging Chinese Silk Lanterns (红灯笼) with Gold Tassels
-        const lanternGeo = new THREE.SphereGeometry(0.32, 10, 10);
-        lanternGeo.scale(1, 1.3, 1);
-        const lantern = new THREE.Mesh(lanternGeo, lanternGlowMat);
-        lantern.position.set(px, 3.4, pz);
-        pavGroup.add(lantern);
-
-        const tasselGeo = new THREE.CylinderGeometry(0.04, 0.1, 0.4, 6);
-        const tassel = new THREE.Mesh(tasselGeo, goldAccentMat);
-        tassel.position.set(px, 2.75, pz);
-        pavGroup.add(tassel);
-      });
-
-      // Lower Pagoda Flared Eaves Roof Tier
-      const lowerEavesGeo = new THREE.ConeGeometry(3.6, 1.2, 8);
-      const lowerEaves = new THREE.Mesh(lowerEavesGeo, roofSlateMat);
-      lowerEaves.position.set(0, 4.2, 0);
-      lowerEaves.castShadow = true;
-      pavGroup.add(lowerEaves);
-
-      // Upper Pagoda Roof Tier
-      const upperEavesGeo = new THREE.ConeGeometry(2.5, 1.1, 8);
-      const upperEaves = new THREE.Mesh(upperEavesGeo, roofSlateMat);
-      upperEaves.position.set(0, 5.1, 0);
-      upperEaves.castShadow = true;
-      pavGroup.add(upperEaves);
-
-      // Golden Pagoda Spire Finial (宝顶)
-      const finialGeo = new THREE.CylinderGeometry(0.05, 0.25, 1.2, 8);
-      const finial = new THREE.Mesh(finialGeo, goldAccentMat);
-      finial.position.set(0, 6.0, 0);
-      pavGroup.add(finial);
-
-      // Warm Amber Lantern Light for Atmospheric Glow
-      const lanternLight = new THREE.PointLight(0xf59e0b, 1.2, 12, 1.5);
-      lanternLight.position.set(0, 3.5, 0);
-      pavGroup.add(lanternLight);
-
-      this.group.add(pavGroup);
-    });
-
-    // 9. Wooden Country Boats ('Nouka') bobbing along the pier
-    this.buildCountryBoats(118, 95);
-  }
-
-  /**
-   * Country Boats ('Nouka') and Wooden Fishing Pier
-   */
-  private buildCountryBoats(pierX: number, pierZ: number) {
-    // Wooden pier
-    const pierGeo = new THREE.BoxGeometry(22, 0.4, 4);
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
-    const pier = new THREE.Mesh(pierGeo, woodMat);
-    pier.position.set(pierX - 8, 0.3, pierZ);
-    pier.receiveShadow = true;
-    this.group.add(pier);
-
-    // Traditional Bengali Boat ('Nouka')
-    const boatGroup = new THREE.Group();
-    boatGroup.position.set(pierX - 18, -0.2, pierZ + 4);
-
-    // Curved Hull
-    const hullGeo = new THREE.CylinderGeometry(1.8, 1.2, 7.5, 12, 1, false, 0, Math.PI);
-    hullGeo.rotateZ(Math.PI / 2);
-    const hullMat = new THREE.MeshStandardMaterial({ color: 0x3d2817, roughness: 0.85 });
-    const hull = new THREE.Mesh(hullGeo, hullMat);
-    boatGroup.add(hull);
-
-    // Bamboo Hood ('Chhoi')
-    const hoodGeo = new THREE.CylinderGeometry(1.2, 1.2, 3.2, 12, 1, false, 0, Math.PI);
-    hoodGeo.rotateZ(Math.PI / 2);
-    const hoodMat = new THREE.MeshStandardMaterial({ color: 0xc4a46c, roughness: 0.95 });
-    const hood = new THREE.Mesh(hoodGeo, hoodMat);
-    hood.position.set(0, 0.5, 0);
-    boatGroup.add(hood);
-
-    this.group.add(boatGroup);
   }
 
   /**
@@ -1293,64 +881,7 @@ export class WorldTerrain {
       walk.receiveShadow = true;
       this.group.add(walk);
     });
-
-    // 3. City Flyover Expressway (Elevated road along Z = -100 to 30 at X = -35, deck Y = 7.5)
-    // Clear underpass clearance for lower road (Main East-West Avenue at Z = 3)
-    const flyoverGeo = new THREE.BoxGeometry(10, 0.8, 130);
-    const concreteMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.8 });
-    const flyover = new THREE.Mesh(flyoverGeo, concreteMat);
-    flyover.position.set(-35, 7.5, -35);
-    flyover.castShadow = true;
-    flyover.receiveShadow = true;
-    this.group.add(flyover);
-
-    // Flyover Concrete Guardrails (Elevated ONLY: minY = 6.8, maxY = 9.5)
-    [-1, 1].forEach((sideX) => {
-      const railGeo = new THREE.BoxGeometry(0.35, 1.1, 130);
-      const rail = new THREE.Mesh(railGeo, curbMat);
-      rail.position.set(-35 + sideX * 4.8, 8.4, -35);
-      rail.castShadow = true;
-      this.group.add(rail);
-
-      this.obstacles.push({
-        minX: -35 + sideX * 4.8 - 0.3,
-        maxX: -35 + sideX * 4.8 + 0.3,
-        minZ: -100,
-        maxZ: 30,
-        height: 9.0,
-        minY: 6.8,
-        maxY: 9.5,
-      });
-    });
-
-    // Flyover Support Pillars & Underpass Portal Frames
-    const pillarZPositions = [-90, -65, -40, -17, 23];
-    pillarZPositions.forEach((pz) => {
-      const pillarGeo = new THREE.CylinderGeometry(1.2, 1.2, 7.5, 12);
-      const pillar = new THREE.Mesh(pillarGeo, concreteMat);
-      pillar.position.set(-35, 3.75, pz);
-      pillar.castShadow = true;
-      this.group.add(pillar);
-
-      this.obstacles.push({
-        minX: -36.5,
-        maxX: -33.5,
-        minZ: pz - 1.5,
-        maxZ: pz + 1.5,
-        height: 7.5,
-        minY: 0.0,
-        maxY: 7.5,
-      });
-    });
-
-    // Overhead Underpass Portal Clearance Beams (Framing the lower avenue at Z = -17 and Z = 23)
-    [-17, 23].forEach((portalZ) => {
-      const portalBeamGeo = new THREE.BoxGeometry(11.0, 0.7, 1.2);
-      const portalBeam = new THREE.Mesh(portalBeamGeo, curbMat);
-      portalBeam.position.set(-35, 7.15, portalZ);
-      portalBeam.castShadow = true;
-      this.group.add(portalBeam);
-    });
+    // 3. (Elevated flyover expressway removed per user instructions; avenue is wide open and clear)
 
     // 4. Pedestrian Foot-Overbridge across Main Avenue with Staircases at Both Ends
     this.buildPedestrianOverbridge();
@@ -2419,15 +1950,7 @@ export class WorldTerrain {
     mtnBridge.castShadow = true;
     this.group.add(mtnBridge);
 
-    // Relic Pedestal inside the Waterfall Grotto (For Quest 3)
-    const pedestalGeo = new THREE.CylinderGeometry(1.2, 1.5, 1.4, 12);
-    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.95 });
-    const pedestal = new THREE.Mesh(pedestalGeo, stoneMat);
-    pedestal.position.set(wfX + 2, 2.2, wfZ - 6);
-    pedestal.castShadow = true;
-    this.group.add(pedestal);
-
-    // Glowing Ancient Waterfall Relic / Crystal
+    // Glowing Ancient Waterfall Relic on the Scenic Mountain Suspension Bridge Overlook (For Quest 3)
     const relicGeo = new THREE.OctahedronGeometry(0.65, 0);
     const relicMat = new THREE.MeshStandardMaterial({
       color: 0x38bdf8,
@@ -2437,9 +1960,43 @@ export class WorldTerrain {
       metalness: 0.9,
     });
     const relic = new THREE.Mesh(relicGeo, relicMat);
-    relic.position.set(wfX + 2, 3.4, wfZ - 6);
+    relic.position.set(245, 23.2, -80);
     relic.name = 'QuestRelic';
     this.group.add(relic);
+
+    // 3. Sprawling Winding Mountain Highway with Switchbacks & Steel Guardrails
+    const mtnRoadMat = new THREE.MeshStandardMaterial({
+      color: 0x334155,
+      roughness: 0.85,
+    });
+    const railMat = new THREE.MeshStandardMaterial({
+      color: 0x94a3b8,
+      metalness: 0.8,
+      roughness: 0.3,
+    });
+
+    const switchbacks = [
+      { x: 195, y: 3.5, z: -35, len: 45, rotY: -0.25 },
+      { x: 220, y: 9.0, z: -60, len: 42, rotY: 0.45 },
+      { x: 235, y: 15.5, z: -75, len: 38, rotY: -0.15 },
+      { x: 248, y: 21.8, z: -80, len: 32, rotY: -0.3 },
+    ];
+
+    switchbacks.forEach((sb) => {
+      const segGeo = new THREE.BoxGeometry(sb.len, 0.3, 7.5);
+      const seg = new THREE.Mesh(segGeo, mtnRoadMat);
+      seg.position.set(sb.x, sb.y, sb.z);
+      seg.rotation.y = sb.rotY;
+      seg.receiveShadow = true;
+      this.group.add(seg);
+
+      // Outer Safety Guardrail
+      const guardGeo = new THREE.BoxGeometry(sb.len, 0.75, 0.25);
+      const guard = new THREE.Mesh(guardGeo, railMat);
+      guard.position.set(sb.x, sb.y + 0.5, sb.z + 3.8);
+      guard.rotation.y = sb.rotY;
+      this.group.add(guard);
+    });
   }
 
   /**
@@ -2491,6 +2048,10 @@ export class WorldTerrain {
     if (this.riverWaterTex) {
       this.riverWaterTex.offset.y -= delta * 0.08;
       this.riverWaterTex.offset.x = Math.sin(this.riverTexOffset * 1.5) * 0.02;
+    }
+
+    if (this.kaifengBridge) {
+      this.kaifengBridge.update(delta, performance.now());
     }
   }
 

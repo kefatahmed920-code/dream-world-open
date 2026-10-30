@@ -33,6 +33,9 @@ import { NetworkConfig } from './game/config/networkConfig';
 import { RankingsModal } from './game/ui/RankingsModal';
 import { CyberTeslaModal } from './game-house/CyberTeslaModal';
 import { GameDoorMetadata } from './game-house/gameRegistry';
+import { GameSignboardModal } from './game/ui/GameSignboardModal';
+import { ReturnHomeModal } from './game/ui/ReturnHomeModal';
+import { GameSignboardConfig } from './game/world/GameSignboard';
 import { Bell, X } from 'lucide-react';
 
 export default function App() {
@@ -57,6 +60,10 @@ export default function App() {
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isRankingsOpen, setIsRankingsOpen] = useState(false);
   const [isCyberTeslaOpen, setIsCyberTeslaOpen] = useState(false);
+  const [isSignboardModalOpen, setIsSignboardModalOpen] = useState(false);
+  const [activeSignboard, setActiveSignboard] = useState<GameSignboardConfig | null>(null);
+  const [isReturnHomeModalOpen, setIsReturnHomeModalOpen] = useState(false);
+  const [playerLocation, setPlayerLocation] = useState<'PRIVATE_HOME' | 'SHARED_CITY'>('PRIVATE_HOME');
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [currentPlaytimeSeconds, setCurrentPlaytimeSeconds] = useState(0);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -169,8 +176,18 @@ export default function App() {
           setIsCyberTeslaOpen(true);
           soundManager.playVehicleDoor();
         } else {
-          showToast(`${door.title} (${door.category}) is coming soon to Game House Module 02!`, 'GAME HOUSE');
+          showToast(`${door.title} (${door.category}) is coming soon!`, 'GAMES');
         }
+      },
+      onOpenCharacterCustomizer: () => {
+        setIsCharacterSelectOpen(true);
+      },
+      onOpenGameSignboard: (sign) => {
+        setActiveSignboard(sign);
+        setIsSignboardModalOpen(true);
+      },
+      onPlayerLocationChanged: (loc) => {
+        setPlayerLocation(loc);
       },
     });
 
@@ -197,7 +214,7 @@ export default function App() {
     setActiveQuest(engine.questManager.getActiveQuest());
     setPlayerStats({ ...engine.questManager.playerStats });
 
-    // Sync HUD state interval (position, vitals, stance)
+    // Sync HUD state interval (position, vitals, stance, location)
     const hudInterval = setInterval(() => {
       if (!engineRef.current) return;
       const eng = engineRef.current;
@@ -209,6 +226,7 @@ export default function App() {
       setPlayerStance(eng.playerStance);
       setIsSwimming(eng.isSwimming);
       setIsDiving(eng.isDiving);
+      setPlayerLocation(eng.playerLocation);
     }, 80);
 
     // Start engine loop
@@ -245,6 +263,8 @@ export default function App() {
         setIsStatsOpen((curr) => { if (curr) anyClosed = true; return false; });
         setIsRankingsOpen((curr) => { if (curr) anyClosed = true; return false; });
         setIsCyberTeslaOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsSignboardModalOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsReturnHomeModalOpen((curr) => { if (curr) anyClosed = true; return false; });
 
         setIsSettingsOpen((curr) => (curr ? false : anyClosed ? false : true));
       }
@@ -439,6 +459,8 @@ export default function App() {
             frameTime={frameTime}
             playerStance={playerStance}
             isDiving={isDiving}
+            playerLocation={playerLocation}
+            onReturnHome={() => setIsReturnHomeModalOpen(true)}
             onOpenMap={() => setIsMapOpen(true)}
             onOpenChat={() => {
               setIsChatOpen(true);
@@ -644,6 +666,34 @@ export default function App() {
           setIsCyberTeslaOpen(false);
           soundManager.playUiClick();
         }}
+      />
+
+      {/* Return to Private Home Confirmation Modal */}
+      <ReturnHomeModal
+        isOpen={isReturnHomeModalOpen}
+        onConfirm={() => {
+          engineRef.current?.returnHome();
+          setPlayerLocation('PRIVATE_HOME');
+          setIsReturnHomeModalOpen(false);
+          soundManager.playCollectCoin();
+        }}
+        onCancel={() => setIsReturnHomeModalOpen(false)}
+      />
+
+      {/* 3D Game Signboard Entry Panel */}
+      <GameSignboardModal
+        isOpen={isSignboardModalOpen}
+        signboard={activeSignboard}
+        onPlayNow={(gameId) => {
+          setIsSignboardModalOpen(false);
+          if (gameId === 'game_cyber_tesla') {
+            setIsCyberTeslaOpen(true);
+            soundManager.playVehicleDoor();
+          } else {
+            showToast('Game coming soon!', 'GAMES');
+          }
+        }}
+        onClose={() => setIsSignboardModalOpen(false)}
       />
     </div>
   );

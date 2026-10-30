@@ -480,19 +480,32 @@ export const CharacterSelectModal: React.FC<CharacterSelectModalProps> = ({
             </div>
           )}
 
-          {/* Confirm Button */}
-          <div className="mt-6 pt-4 border-t border-slate-800 flex gap-3">
+          {/* Action Buttons: Apply, Cancel, Reset to Default, and Back */}
+          <div className="mt-6 pt-4 border-t border-slate-800 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setAppearance({ ...DEFAULT_PLAYER_APPEARANCE })}
+              className="py-2.5 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition"
+              title="Reset all settings to default avatar"
+            >
+              Reset to Default
+            </button>
             <button
               onClick={onClose}
-              className="py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition"
+              className="py-2.5 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 font-semibold text-xs transition"
+            >
+              Back
+            </button>
+            <button
+              onClick={onClose}
+              className="py-2.5 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition"
             >
               Cancel
             </button>
             <button
               onClick={handleConfirm}
-              className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition active:scale-[0.98]"
+              className="flex-1 py-2.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/25 transition active:scale-[0.98]"
             >
-              <Check className="w-4 h-4" /> Equip & Save Character
+              <Check className="w-4 h-4" /> Apply & Equip
             </button>
           </div>
         </div>

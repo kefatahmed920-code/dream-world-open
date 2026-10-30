@@ -66,6 +66,10 @@ export class VoiceChatManager {
     };
 
     this.mpManager.onVoiceStatus = (senderId, isMuted, isSpeaking) => {
+      const peer = this.peers.get(senderId);
+      if (peer) {
+        peer.audioElement.muted = this.isDeafened || isMuted;
+      }
       if (isSpeaking && !isMuted) {
         this.activeSpeakers.add(senderId);
       } else {

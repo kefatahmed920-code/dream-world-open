@@ -89,7 +89,7 @@ export interface NPCConfig {
 
 export interface VehicleConfig {
   id: string;
-  type: 'cng' | 'car' | 'bike';
+  type: 'cng' | 'car' | 'bike' | 'bus' | 'boat';
   name: string;
   nameBn: string;
   position: [number, number, number];

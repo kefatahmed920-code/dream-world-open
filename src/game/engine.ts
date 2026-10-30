@@ -17,7 +17,7 @@ import { soundManager } from './audio/soundManager';
 import { MultiplayerManager } from './multiplayer/multiplayerManager';
 import { VoiceChatManager } from './multiplayer/voiceChatManager';
 import { GameSettings, SavedGameState, GraphicsQuality } from './types';
-import { GameHouseBuilding } from '../game-house/GameHouseBuilding';
+import { GameSignboardManager, GameSignboardConfig } from './world/GameSignboard';
 import { GameDoorMetadata } from '../game-house/gameRegistry';
 import { RiverEcosystem } from './world/riverEcosystem';
 
@@ -32,6 +32,10 @@ export interface GameEngineCallbacks {
   onMultiplayerConnectionChanged?: (connected: boolean, playerCount: number) => void;
   onMultiplayerChatReceived?: (sender: string, text: string) => void;
   onEnterGameDoor?: (door: GameDoorMetadata) => void;
+  onOpenCharacterCustomizer?: () => void;
+  onOpenGameSignboard?: (signboard: GameSignboardConfig) => void;
+  onPlayerLocationChanged?: (location: 'PRIVATE_HOME' | 'SHARED_CITY') => void;
+  onStartFishingChallenge?: () => void;
 }
 
 // Static preallocated scratch objects to eliminate per-frame GC heap churn
@@ -59,8 +63,9 @@ export class GameEngine {
   public inputManager: InputManager;
   public multiplayerManager: MultiplayerManager;
   public voiceChatManager: VoiceChatManager;
-  public gameHouse: GameHouseBuilding;
+  public gameSignboards: GameSignboardManager;
   public riverEcosystem: RiverEcosystem;
+  public playerLocation: 'PRIVATE_HOME' | 'SHARED_CITY' = 'SHARED_CITY';
 
   // Player Physics & Locomotion State
   public playerVelocity = new THREE.Vector3();
@@ -155,14 +160,10 @@ export class GameEngine {
     this.riverEcosystem = new RiverEcosystem();
     this.scene.add(this.riverEcosystem.group);
 
-    // Game House — Module 02
-    this.gameHouse = new GameHouseBuilding();
-    this.scene.add(this.gameHouse.group);
-    this.terrain.obstacles.push(...this.gameHouse.obstacles);
-
-    this.gameHouse.doorManager.onEnterDoorTriggered = (door) => {
-      this.callbacks.onEnterGameDoor?.(door);
-    };
+    // 1. 3D Game Signboard System (Beside Overbridge South Stairs Landing at [10.5, 0, 14.8])
+    this.gameSignboards = new GameSignboardManager();
+    this.scene.add(this.gameSignboards.group);
+    this.terrain.obstacles.push(...this.gameSignboards.obstacles);
 
     this.weatherManager = new WeatherManager(this.scene);
     this.questManager = new QuestManager();
@@ -172,15 +173,17 @@ export class GameEngine {
       this.callbacks.onNotification?.(msg, title);
     };
 
-    // Player 3D Rig (Spawns in Dhanmondi City center at [6, 0, 12])
+    // Player 3D Rig (Spawns directly on Dhanmondi Avenue city sidewalk at [6, 0.05, 12])
     let initialAppearance: CharacterAppearance = DEFAULT_PLAYER_APPEARANCE;
     try {
       const saved = localStorage.getItem('dream_player_appearance');
       if (saved) initialAppearance = JSON.parse(saved);
     } catch {}
     this.playerRig = new CharacterRig(initialAppearance);
-    const spawnY = this.terrain.getTerrainHeight(6, 12);
-    this.playerRig.group.position.set(6, spawnY, 12);
+    this.playerRig.group.position.set(6, 0.05, 12);
+    this.playerRotation = 0;
+    this.playerRig.group.rotation.y = this.playerRotation;
+    this.playerLocation = 'SHARED_CITY';
     this.scene.add(this.playerRig.group);
 
     // NPCs & Vehicles
@@ -621,8 +624,8 @@ export class GameEngine {
       this.isDriving,
     );
 
-    // 10. Update Game House Module 02 (doors, proximity, animations)
-    this.gameHouse.update(playerPos, delta);
+    // 10. Update 3D Game Signboards (Floating rings and interaction pulses)
+    this.gameSignboards.update(delta);
 
     // 11. Update Real-Time Multiplayer Sync
     const speedFactor = this.isDriving
@@ -714,11 +717,10 @@ export class GameEngine {
     // 3. Check Quest 3 Waterfall Relic Pickup (at [272, 3.4, -101])
     const activeQ = this.questManager.getActiveQuest();
     if (activeQ && activeQ.id === 'quest_3_waterfall' && activeQ.currentObjectiveIndex === 1) {
-      const relicPos = new THREE.Vector3(272, 3.4, -101);
+      const relicPos = new THREE.Vector3(245, 23.2, -80);
       if (playerPos.distanceTo(relicPos) < 3.2) {
-        this.callbacks.onInteractionPrompt?.('[E] Take Ancient Waterfall Relic');
+        this.callbacks.onInteractionPrompt?.('[E] Take Ancient Mountain Overlook Relic');
         if (input.interact) {
-          // Hide 3D relic mesh in grotto
           const relicMesh = this.terrain.group.getObjectByName('QuestRelic');
           if (relicMesh) relicMesh.visible = false;
           this.questManager.completeCurrentObjective(activeQ);
@@ -727,16 +729,24 @@ export class GameEngine {
       }
     }
 
-    // 4. Check Nearby Game House Magical Door
-    const activeDoor = this.gameHouse.doorManager.getActiveProximityDoor();
-    if (activeDoor) {
-      if (activeDoor.status === 'available') {
-        this.callbacks.onInteractionPrompt?.(`[E] Enter ${activeDoor.title}`);
-        if (input.interact) {
-          this.callbacks.onEnterGameDoor?.(activeDoor);
-        }
-      } else {
-        this.callbacks.onInteractionPrompt?.(`Door ${activeDoor.doorNumber}: ${activeDoor.title} (Coming Soon)`);
+    // 4. Check Kashem Majhi Fishing Challenge on Wooden River Pier ([66.5, 0.5, 14.2])
+    const pierMajhiPos = new THREE.Vector3(66.5, 0.5, 14.2);
+    if (playerPos.distanceTo(pierMajhiPos) < 3.5) {
+      this.callbacks.onInteractionPrompt?.('[E] মাছ ধরার প্রতিযোগিতা শুরু করুন / 2-Min Fishing Challenge');
+      if (input.interact) {
+        soundManager.playCollectCoin();
+        this.callbacks.onStartFishingChallenge?.();
+      }
+      return;
+    }
+
+    // 5. Check 3D Game Signboards (Beside Overbridge Stairs with Glowing Disc & Floating Rings)
+    const nearbySign = this.gameSignboards.getNearbySignboard(playerPos, 3.5);
+    if (nearbySign) {
+      this.callbacks.onInteractionPrompt?.(nearbySign.promptText);
+      if (input.interact) {
+        soundManager.playCollectCoin();
+        this.callbacks.onOpenGameSignboard?.(nearbySign);
       }
       return;
     }
@@ -804,6 +814,77 @@ export class GameEngine {
     this.playerRig.group.position.set(x, y, z);
     this.playerVelocity.set(0, 0, 0);
     this.callbacks.onNotification?.(`Fast travelled to [${Math.round(x)}, ${Math.round(z)}]`, 'TELEPORT');
+  }
+
+  /**
+   * Safely returns player to central city street spawn
+   */
+  public returnHome() {
+    if (this.isDriving && this.vehicleManager.activePlayerVehicle) {
+      this.vehicleManager.exitVehicle();
+      this.isDriving = false;
+      this.callbacks.onVehicleStateChanged?.(null);
+    }
+    this.playerRig.group.position.set(6, 0.05, 12);
+    this.playerVelocity.set(0, 0, 0);
+    this.playerRotation = 0;
+    this.playerRig.group.rotation.y = this.playerRotation;
+    this.callbacks.onNotification?.('ধানমন্ডি সেন্ট্রাল পয়েন্টে ফিরে এসেছেন', 'DHANMONDI');
+  }
+
+  public exitToCity() {
+    this.playerRig.group.position.set(6, 0.05, 12);
+    this.playerVelocity.set(0, 0, 0);
+  }
+
+  /**
+   * Spawns requested vehicle on the road right next to player
+   * Spawned vehicles stay permanently in the world.
+   */
+  public spawnVehicleNearPlayer(type: string): void {
+    const playerPos = this.playerRig.group.position;
+    const forwardX = Math.sin(this.playerRotation);
+    const forwardZ = Math.cos(this.playerRotation);
+    const rightX = -forwardZ;
+    const rightZ = forwardX;
+
+    const spawnX = playerPos.x + rightX * 3.2;
+    const spawnZ = playerPos.z + rightZ * 3.2;
+    const spawnY = this.terrain.getTerrainHeight(spawnX, spawnZ);
+
+    const spawnPos = new THREE.Vector3(spawnX, spawnY, spawnZ);
+    const veh = this.vehicleManager.spawnVehicle(
+      type,
+      spawnPos,
+      this.playerRotation,
+      (x, z, y) => this.terrain.getTerrainHeight(x, z, y),
+    );
+
+    soundManager.playRadioBeep(true);
+    this.callbacks.onNotification?.(`${veh.config.nameBn} রাস্তায় হাজির হয়েছে!`, 'GARAGE DELIVERY');
+  }
+
+  /**
+   * Validates & generates a safe city spawn location strictly within urban pavement
+   * Completely excludes the Padma river, rural village, mountain slopes, and obstacles.
+   */
+  public getRandomCitySpawn(): THREE.Vector3 {
+    // City bounds: X from -120 to 45, Z from -30 to 30
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const x = -110 + Math.random() * 145; // between -110 and +35
+      const z = -25 + Math.random() * 50;  // between -25 and +25
+      const y = this.terrain.getTerrainHeight(x, z);
+
+      // Exclude water & river
+      if (this.terrain.isWater(x, z, y)) continue;
+
+      // Exclude obstacles
+      if (this.terrain.checkObstacleCollision(x, z, 0.5, y)) continue;
+
+      return new THREE.Vector3(x, y, z);
+    }
+    // Safe fallback to Dhanmondi sidewalk
+    return new THREE.Vector3(6.0, 0.05, 6.8);
   }
 
   public setPlayerAppearance(appearance: CharacterAppearance) {

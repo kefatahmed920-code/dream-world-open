@@ -18,6 +18,7 @@ export interface RemotePlayerState {
   vehicleType?: string;
   appearance: CharacterAppearance;
   lastUpdate: number;
+  inPrivateHome?: boolean;
   chatBubble?: { text: string; expiresAt: number };
 }
 
@@ -30,11 +31,13 @@ export class RemotePlayerActor {
   public currentSpeed = 0;
   public isAirborne = false;
   public isDriving = false;
+  public inPrivateHome = false;
   public nametagMesh: THREE.Sprite;
 
   constructor(state: RemotePlayerState, scene: THREE.Scene) {
     this.id = state.id;
     this.name = state.name;
+    this.inPrivateHome = !!state.inPrivateHome;
     this.rig = new CharacterRig(state.appearance);
 
     this.rig.group.position.set(state.position[0], state.position[1], state.position[2]);
@@ -101,6 +104,10 @@ export class RemotePlayerActor {
     this.rig.updateAnimation(delta, this.currentSpeed, this.isAirborne, this.isDriving);
   }
 
+  public setVisibility(visible: boolean) {
+    this.rig.group.visible = visible;
+  }
+
   public destroy(scene: THREE.Scene) {
     scene.remove(this.rig.group);
   }
@@ -124,6 +131,7 @@ export class MultiplayerManager {
   public currentRoom = 'Dhaka-Hub-1';
   public serverPlayerCount = 1;
   public latencyMs = 0;
+  public locationState: 'PRIVATE_HOME' | 'SHARED_CITY' = 'PRIVATE_HOME';
   public remotePlayers: Map<string, RemotePlayerActor> = new Map();
 
   private scene: THREE.Scene;
@@ -463,6 +471,7 @@ export class MultiplayerManager {
       isAirborne,
       isDriving,
       appearance,
+      inPrivateHome: this.locationState === 'PRIVATE_HOME',
       time: Date.now(),
     });
   }
@@ -493,6 +502,7 @@ export class MultiplayerManager {
               isAirborne: !!p.isAirborne,
               isDriving: !!p.isDriving,
               appearance: p.appearance as CharacterAppearance,
+              inPrivateHome: !!p.inPrivateHome,
               lastUpdate: Date.now(),
             };
             const actor = new RemotePlayerActor(state, this.scene);
@@ -596,6 +606,7 @@ export class MultiplayerManager {
           isAirborne: data.isAirborne as boolean,
           isDriving: data.isDriving as boolean,
           appearance: data.appearance as CharacterAppearance,
+          inPrivateHome: !!data.inPrivateHome,
           lastUpdate: Date.now(),
         };
         actor = new RemotePlayerActor(state, this.scene);
@@ -605,13 +616,14 @@ export class MultiplayerManager {
         this.onConnectionChanged?.(this.isConnected, this.serverPlayerCount, this.connectionMessage);
       }
 
-      // Update target transform
+      // Update target transform and private home state
       const pos = data.position as [number, number, number];
       actor.targetPos.set(pos[0], pos[1], pos[2]);
       actor.targetRotY = data.rotationY as number;
       actor.currentSpeed = data.speed as number;
       actor.isAirborne = data.isAirborne as boolean;
       actor.isDriving = data.isDriving as boolean;
+      actor.inPrivateHome = !!data.inPrivateHome;
     }
   }
 
@@ -640,9 +652,19 @@ export class MultiplayerManager {
       this.sendPing();
     }
 
-    // Update all remote players
+    // Update all remote players and enforce private home isolation
+    const isLocalInHome = this.locationState === 'PRIVATE_HOME';
     for (const actor of this.remotePlayers.values()) {
       actor.update(delta);
+
+      // Isolation rules:
+      // - Inside Private Home: local player sees NO remote players
+      // - Outside in Shared City: local player sees city players, but NOT players inside private homes
+      if (isLocalInHome) {
+        actor.setVisibility(false);
+      } else {
+        actor.setVisibility(!actor.inPrivateHome);
+      }
     }
   }
 

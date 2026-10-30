@@ -16,6 +16,7 @@ import {
   Navigation,
   Gauge,
   Trophy,
+  Home,
 } from 'lucide-react';
 import { PlayerStats } from '../types';
 import { ActiveVehicle } from '../vehicles/vehicleManager';
@@ -38,6 +39,8 @@ interface HUDProps {
   frameTime?: number;
   playerStance?: 'stand' | 'crouch' | 'prone' | 'swim';
   isDiving?: boolean;
+  playerLocation?: 'PRIVATE_HOME' | 'SHARED_CITY';
+  onReturnHome?: () => void;
   onOpenMap: () => void;
   onOpenChat: () => void;
   onOpenPlayers: () => void;
@@ -68,6 +71,8 @@ export const HUD: React.FC<HUDProps> = ({
   frameTime,
   playerStance = 'stand',
   isDiving = false,
+  playerLocation = 'PRIVATE_HOME',
+  onReturnHome,
   onOpenMap,
   onOpenChat,
   onOpenPlayers,
@@ -123,6 +128,24 @@ export const HUD: React.FC<HUDProps> = ({
       <div className="flex items-start justify-between w-full gap-2">
         {/* --- TOP LEFT: COMPACT CONTROL ICONS --- */}
         <div className="flex items-center gap-1.5 pointer-events-auto">
+          {/* Home Button (বাড়ি / Return to Private Room) */}
+          {onReturnHome && (
+            <button
+              onClick={onReturnHome}
+              title={playerLocation === 'PRIVATE_HOME' ? 'ব্যক্তিগত ঘর / Private Room' : 'বাড়ি ফিরুন / Return to Private Home'}
+              className={`h-9 px-2.5 rounded-2xl border shadow-xl flex items-center gap-1.5 active:scale-95 transition-all backdrop-blur-xs ${
+                playerLocation === 'PRIVATE_HOME'
+                  ? 'bg-emerald-950/85 border-emerald-500/70 text-emerald-300'
+                  : 'bg-slate-950/80 hover:bg-slate-900 border-slate-700/80 text-amber-400'
+              }`}
+            >
+              <Home className="w-4 h-4" />
+              <span className="text-[11px] font-bold hidden sm:inline">
+                {playerLocation === 'PRIVATE_HOME' ? 'ঘর' : 'বাড়ি'}
+              </span>
+            </button>
+          )}
+
           {/* Live Online Player Counter Button */}
           <button
             onClick={onOpenPlayers}
