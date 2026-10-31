@@ -38,6 +38,7 @@ import { ReturnHomeModal } from './game/ui/ReturnHomeModal';
 import { GameSignboardConfig } from './game/world/GameSignboard';
 import { SmartphoneModal } from './game/smartphone/SmartphoneModal';
 import { FishingChallengeModal } from './game/fishing/FishingChallengeModal';
+import { VillageSpeakerModal } from './game/village/VillageSpeakerModal';
 import { Bell, X } from 'lucide-react';
 
 export default function App() {
@@ -67,6 +68,7 @@ export default function App() {
   const [isReturnHomeModalOpen, setIsReturnHomeModalOpen] = useState(false);
   const [isSmartphoneOpen, setIsSmartphoneOpen] = useState(false);
   const [isFishingChallengeOpen, setIsFishingChallengeOpen] = useState(false);
+  const [isVillageSpeakerOpen, setIsVillageSpeakerOpen] = useState(false);
   const [playerLocation, setPlayerLocation] = useState<'PRIVATE_HOME' | 'SHARED_CITY'>('PRIVATE_HOME');
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [currentPlaytimeSeconds, setCurrentPlaytimeSeconds] = useState(0);
@@ -195,6 +197,9 @@ export default function App() {
       },
       onStartFishingChallenge: () => {
         setIsFishingChallengeOpen(true);
+      },
+      onOpenVillageSpeaker: () => {
+        setIsVillageSpeakerOpen(true);
       },
     });
 
@@ -764,6 +769,12 @@ export default function App() {
           }
         }}
         onClose={() => setIsFishingChallengeOpen(false)}
+      />
+
+      {/* Central Plaza Outdoor Music Speaker System Modal */}
+      <VillageSpeakerModal
+        isOpen={isVillageSpeakerOpen}
+        onClose={() => setIsVillageSpeakerOpen(false)}
       />
     </div>
   );

@@ -5,6 +5,8 @@
 
 import * as THREE from 'three';
 import { KaifengBridgeAndRiver } from './KaifengBridgeAndRiver';
+import { CountrysideVillage } from './CountrysideVillage';
+import { soundManager } from '../audio/soundManager';
 
 export interface WorldObstacle {
   minX: number;
@@ -381,6 +383,7 @@ export class WorldTerrain {
   public riverMesh: THREE.Mesh | null = null;
   public riverWaterTex: THREE.CanvasTexture | null = null;
   public kaifengBridge!: KaifengBridgeAndRiver;
+  public countrysideVillage!: CountrysideVillage;
 
   private waterfallTexOffset = 0;
   private riverTexOffset = 0;
@@ -393,7 +396,7 @@ export class WorldTerrain {
     this.buildGroundMesh();
     this.buildRiverAndBridge();
     this.buildCityRegion();
-    this.buildVillageRegion();
+    this.countrysideVillage = new CountrysideVillage(this.group, this.obstacles);
     this.buildHillsAndWaterfall();
     this.buildHorizonDistantMountains();
   }
@@ -409,13 +412,21 @@ export class WorldTerrain {
       return bridgeH;
     }
 
-    // 2. Wooden Fishing Pier & Boat Dock
+    // 2. Wooden Fishing Pier & Boat Dock on Padma River
     const pierH = this.kaifengBridge.getPierElevation(x, z);
     if (pierH !== null) {
       return pierH;
     }
 
-    // 3. Small Modern Pedestrian Foot-Overbridge across Dhanmondi City Avenue (at X = 0, deck Y = 5.2)
+    // 3. Countryside Village Elevation (Wooden Fishing Platform, Elevated Hill, Gazebo, Plaza, Roads)
+    if (this.countrysideVillage) {
+      const vElev = this.countrysideVillage.getVillageElevation(x, z, currentY);
+      if (vElev !== null) {
+        return vElev;
+      }
+    }
+
+    // 4. Small Modern Pedestrian Foot-Overbridge across Dhanmondi City Avenue (at X = 0, deck Y = 5.2)
     // Multi-level height: lower roadway passes underneath freely at 0.03; pedestrians on stairs/deck climb to 5.2
     if (currentY !== undefined && currentY > 1.2) {
       // Overbridge Main Walkway Deck (X: -1.8 to 1.8, Z: -8.8 to 14.8)
@@ -432,95 +443,89 @@ export class WorldTerrain {
       }
     }
 
-    // 3. Wide River Channel (outside the bridge deck)
+    // 5. Wide River Channel (outside the bridge deck)
     const riverDist = Math.abs(x - 87.5);
     if (riverDist < 25) {
-      // Sloping riverbed ground elevation beneath water
       const bedY = this.getGroundElevation(x, z);
-      // If entity is floating/swimming (currentY near surface >= -0.7), return swimming float level (-0.45)
-      // Otherwise return actual solid riverbed ground so players enter and exit water naturally!
       if (currentY !== undefined && currentY >= -0.7) {
         return -0.45;
       }
       return bedY;
     }
 
-    // 4. Mountain & Waterfall Range (X > 180, Z < 25)
-    if (x > 180 && z < 25) {
-      const hillDistX = (x - 180) / 120; // 0 to 1+
-      const hillDistZ = (25 - z) / 120; // 0 to 1+
-      const hillFactor = Math.min(1.8, Math.max(0, hillDistX * 0.7 + hillDistZ * 0.6));
+    // 6. Village Pond Basin (outside wooden fishing platform)
+    const pondNorm = Math.hypot((x - 188) / 30, (z + 22) / 20);
+    if (pondNorm < 1.0) {
+      const bedY = this.getGroundElevation(x, z);
+      if (currentY !== undefined && currentY >= -0.6) {
+        return -0.35; // Floating/swimming in pond water
+      }
+      return bedY;
+    }
 
-      // Mountain peaks and trail
+    // 7. Mountain & Waterfall Range (X > 245, Z < -50)
+    if (x > 245 && z < -50) {
+      const hillDistX = (x - 245) / 60;
+      const hillDistZ = (-50 - z) / 60;
+      const hillFactor = Math.min(1.8, Math.max(0, hillDistX * 0.7 + hillDistZ * 0.6));
       const peakHeight = Math.sin(x * 0.02) * Math.cos(z * 0.02) * 8;
       const baseMountain = Math.pow(hillFactor, 1.6) * 26 + peakHeight;
 
-      // Mountain Trail carve-out (leads to waterfall at [270, -100])
-      const trailDist = Math.abs((x - 240) * 0.6 + (z + 40) * 0.8);
+      const trailDist = Math.abs((x - 260) * 0.6 + (z + 80) * 0.8);
       if (trailDist < 7) {
         return Math.max(0.5, baseMountain * 0.45);
       }
-
       return Math.max(0.5, baseMountain);
     }
 
-    // 5. Bengali Countryside & Village (X: 112.5 to 220, Z: 25 to 180)
-    if (x >= 112.5 && z >= 25) {
-      const ridge = Math.sin(x * 0.08) * 0.4 + Math.cos(z * 0.08) * 0.4;
-      return 0.5 + ridge;
-    }
-
-    // 6. City Region (Flat paved surface at Y = 0.03 for roads, 0.0 for ground)
+    // 8. Flat surface for roads, plaza, and city
     return 0.03;
   }
 
   /**
    * Natural Ground Mesh Elevation
-   * Pure terrain, riverbed, hills, and plains.
-   * Completely uncovers the riverbed under the bridge so water flows uninterrupted from one side to the other.
-   * Keeps city ground level at 0.0 under the overpass.
+   * Pure terrain, riverbed, pond, hills, and plains.
    */
   public getGroundElevation(x: number, z: number): number {
     // 1. Wide River Channel (X between 62.5 and 112.5)
-    // Continuous sunken riverbed along the ENTIRE map from north to south, including under the bridge!
     const riverDist = Math.abs(x - 87.5);
     if (riverDist < 25) {
       return -3.2 * (1 - riverDist / 25);
     }
 
-    // 2. Mountain & Waterfall Range (X > 180, Z < 25)
-    if (x > 180 && z < 25) {
-      const hillDistX = (x - 180) / 120;
-      const hillDistZ = (25 - z) / 120;
+    // 2. Village Natural Pond Basin (Center: [188, -22])
+    const pondNorm = Math.hypot((x - 188) / 30, (z + 22) / 20);
+    if (pondNorm < 1.0) {
+      return -2.2 * (1 - pondNorm);
+    }
+
+    // 3. High Mountain & Waterfall Range (X > 245, Z < -50)
+    if (x > 245 && z < -50) {
+      const hillDistX = (x - 245) / 60;
+      const hillDistZ = (-50 - z) / 60;
       const hillFactor = Math.min(1.8, Math.max(0, hillDistX * 0.7 + hillDistZ * 0.6));
       const peakHeight = Math.sin(x * 0.02) * Math.cos(z * 0.02) * 8;
       const baseMountain = Math.pow(hillFactor, 1.6) * 26 + peakHeight;
 
-      const trailDist = Math.abs((x - 240) * 0.6 + (z + 40) * 0.8);
+      const trailDist = Math.abs((x - 260) * 0.6 + (z + 80) * 0.8);
       if (trailDist < 7) {
         return Math.max(0.5, baseMountain * 0.45);
       }
       return Math.max(0.5, baseMountain);
     }
 
-    // 3. Bengali Countryside & Village (X: 112.5 to 220, Z: 25 to 180)
-    if (x >= 112.5 && z >= 25) {
-      const ridge = Math.sin(x * 0.08) * 0.4 + Math.cos(z * 0.08) * 0.4;
-      return 0.5 + ridge;
-    }
-
-    // 4. City Region (Flat paved ground at Y = 0.0)
+    // 4. City & Village Ground Level
     return 0.0;
   }
 
   /**
-   * Check if coordinate is inside Padma River water body
-   * Excludes upper bridge deck so vehicles and pedestrians crossing bridge are not in water.
+   * Check if coordinate is inside water body (Padma River or Village Pond)
+   * Excludes upper bridge deck and wooden fishing pier so entities walking on them are not in water.
    */
   public isWater(x: number, z: number, y?: number): boolean {
+    // 1. Padma River
     const riverDist = Math.abs(x - 87.5);
     if (riverDist < 25) {
-      // If entity is on bridge span (X: 50 to 125, Z: -6.5 to 12.5) with elevation >= 2.0, they are on bridge deck
       if (x >= 50 && x <= 125 && z >= -6.5 && z <= 12.5) {
         if (y !== undefined && y >= 2.0) {
           return false;
@@ -528,6 +533,17 @@ export class WorldTerrain {
       }
       return true;
     }
+
+    // 2. Village Pond (Center: [188, -22])
+    const pondNorm = Math.hypot((x - 188) / 30, (z + 22) / 20);
+    if (pondNorm < 1.0) {
+      // If player is on the wooden fishing pier / walkway (elevation >= 0.35m), not in water
+      if (y !== undefined && y >= 0.35) {
+        return false;
+      }
+      return true;
+    }
+
     return false;
   }
 
@@ -1749,184 +1765,8 @@ export class WorldTerrain {
     this.group.add(lampGroup);
   }
 
-  /**
-   * Region B: Bengali Countryside & Shonar Village
-   */
-  private buildVillageRegion() {
-    // East Connecting Road (connecting Kaifeng bridge exit at X = 125 to village and mountain highway at X = 195)
-    const eastRoadGeo = new THREE.PlaneGeometry(70, 16);
-    eastRoadGeo.rotateX(-Math.PI / 2);
-    const eastRoadMat = new THREE.MeshStandardMaterial({
-      map: createRoadTexture(),
-      roughness: 0.85,
-      metalness: 0.1,
-    });
-    const eastRoad = new THREE.Mesh(eastRoadGeo, eastRoadMat);
-    eastRoad.position.set(160, 0.04, 3.0);
-    eastRoad.receiveShadow = true;
-    this.group.add(eastRoad);
+  // Note: Region B (Bengali Countryside & Shonar Village) is fully managed by this.countrysideVillage (CountrysideVillage.ts)
 
-    // Sidewalks / Shoulders for East Road
-    const shoulderMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.9 });
-    [-1, 1].forEach((side) => {
-      const shGeo = new THREE.BoxGeometry(70, 0.16, 2.5);
-      const sh = new THREE.Mesh(shGeo, shoulderMat);
-      sh.position.set(160, 0.08, 3.0 + side * 9.25);
-      sh.receiveShadow = true;
-      this.group.add(sh);
-    });
-
-    const villageHuts = [
-      { x: 150, z: 75, rot: 0.3 },
-      { x: 175, z: 85, rot: -0.2 },
-      { x: 145, z: 110, rot: 0.8 },
-      { x: 180, z: 130, rot: -0.5 },
-      { x: 165, z: 155, rot: 0.1 },
-    ];
-
-    for (const hut of villageHuts) {
-      this.buildVillageHut(hut.x, hut.z, hut.rot);
-    }
-
-    // Banana & Coconut Palm Trees in village
-    for (let i = 0; i < 35; i++) {
-      const tx = 130 + Math.random() * 80;
-      const tz = 50 + Math.random() * 120;
-      this.buildPalmTree(tx, tz);
-    }
-
-    // Village Tea Tong (small roadside tea stall with wooden benches)
-    this.buildVillageTeaTong(160, 95);
-  }
-
-  private buildVillageHut(x: number, z: number, rotY: number) {
-    const groundY = this.getTerrainHeight(x, z);
-    const hutGroup = new THREE.Group();
-    hutGroup.position.set(x, groundY, z);
-    hutGroup.rotation.y = rotY;
-
-    // Clay / Brick Base Walls
-    const wallGeo = new THREE.BoxGeometry(7, 3.2, 5.5);
-    const wallMat = new THREE.MeshStandardMaterial({
-      color: 0x9c7a5b, // Warm earthen clay
-      roughness: 0.95,
-    });
-    const walls = new THREE.Mesh(wallGeo, wallMat);
-    walls.position.y = 1.6;
-    walls.castShadow = true;
-    walls.receiveShadow = true;
-    hutGroup.add(walls);
-
-    // Weathered Corrugated Tin Roof (Slanted Gable)
-    const tinTex = createTinRoofTexture();
-    const roofGeo = new THREE.ConeGeometry(5.2, 2.2, 4);
-    roofGeo.rotateY(Math.PI / 4);
-    const roofMat = new THREE.MeshStandardMaterial({
-      map: tinTex,
-      roughness: 0.7,
-      metalness: 0.3,
-    });
-    const roof = new THREE.Mesh(roofGeo, roofMat);
-    roof.position.y = 4.3;
-    roof.castShadow = true;
-    hutGroup.add(roof);
-
-    // Veranda Wooden Pillars
-    const pillarGeo = new THREE.CylinderGeometry(0.09, 0.09, 2.8, 8);
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
-    [-2.8, 2.8].forEach((px) => {
-      const p = new THREE.Mesh(pillarGeo, woodMat);
-      p.position.set(px, 1.4, 3.2);
-      p.castShadow = true;
-      hutGroup.add(p);
-    });
-
-    this.group.add(hutGroup);
-
-    this.obstacles.push({
-      minX: x - 4.2,
-      maxX: x + 4.2,
-      minZ: z - 3.5,
-      maxZ: z + 3.5,
-      height: 5.5,
-    });
-  }
-
-  private buildPalmTree(x: number, z: number) {
-    const y = this.getTerrainHeight(x, z);
-    if (y < 0.2) return; // don't grow in deep water
-
-    const treeGroup = new THREE.Group();
-    treeGroup.position.set(x, y, z);
-
-    // Curved Trunk
-    const trunkHeight = 6.5 + Math.random() * 2.5;
-    const trunkGeo = new THREE.CylinderGeometry(0.18, 0.32, trunkHeight, 8);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4f3b, roughness: 0.9 });
-    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-    trunk.position.y = trunkHeight / 2;
-    trunk.rotation.z = (Math.random() - 0.5) * 0.15;
-    trunk.castShadow = true;
-    treeGroup.add(trunk);
-
-    // Palm Fronds
-    const frondMat = new THREE.MeshStandardMaterial({
-      color: 0x15803d,
-      roughness: 0.8,
-      side: THREE.DoubleSide,
-    });
-
-    for (let f = 0; f < 7; f++) {
-      const angle = (f / 7) * Math.PI * 2;
-      const frondGeo = new THREE.ConeGeometry(0.65, 3.8, 4);
-      frondGeo.rotateX(Math.PI / 3);
-      frondGeo.rotateY(angle);
-      const frond = new THREE.Mesh(frondGeo, frondMat);
-      frond.position.set(0, trunkHeight, 0);
-      frond.castShadow = true;
-      treeGroup.add(frond);
-    }
-
-    this.group.add(treeGroup);
-  }
-
-  private buildVillageTeaTong(x: number, z: number) {
-    const y = this.getTerrainHeight(x, z);
-    const tongGroup = new THREE.Group();
-    tongGroup.position.set(x, y, z);
-
-    // Wooden stall counter
-    const counterGeo = new THREE.BoxGeometry(4.5, 1.2, 2.2);
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 });
-    const counter = new THREE.Mesh(counterGeo, woodMat);
-    counter.position.y = 0.6;
-    counter.castShadow = true;
-    tongGroup.add(counter);
-
-    // Steaming Tea Kettle (Aluminum / Steel)
-    const kettleGeo = new THREE.CylinderGeometry(0.3, 0.35, 0.6, 12);
-    const kettleMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.9, roughness: 0.2 });
-    const kettle = new THREE.Mesh(kettleGeo, kettleMat);
-    kettle.position.set(-0.8, 1.5, 0);
-    tongGroup.add(kettle);
-
-    // Canopy Roof
-    const canopyGeo = new THREE.BoxGeometry(5.2, 0.15, 3.2);
-    const canopyMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.7 });
-    const canopy = new THREE.Mesh(canopyGeo, canopyMat);
-    canopy.position.y = 2.8;
-    tongGroup.add(canopy);
-
-    this.group.add(tongGroup);
-
-    this.obstacles.push({
-      minX: x - 2.5,
-      maxX: x + 2.5,
-      minZ: z - 1.5,
-      maxZ: z + 1.5,
-      height: 3.0,
-    });
-  }
 
   /**
    * Region C: Mountain Range, Scenic Trail, and Cascading Waterfall
@@ -2075,6 +1915,10 @@ export class WorldTerrain {
 
     if (this.kaifengBridge) {
       this.kaifengBridge.update(delta, performance.now());
+    }
+
+    if (this.countrysideVillage) {
+      this.countrysideVillage.update(delta, soundManager.isVillageMusicPlaying);
     }
   }
 

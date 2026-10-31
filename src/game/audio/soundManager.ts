@@ -586,6 +586,144 @@ class SoundManager {
     source.start(now);
     source.stop(now + 0.34);
   }
+
+  // ==========================================
+  // VILLAGE OUTDOOR MUSIC SPEAKER SYSTEM
+  // ==========================================
+  private villageMusicGain: GainNode | null = null;
+  private villageMusicSpatialGain: GainNode | null = null;
+  private villageMusicInterval: number | null = null;
+  public isVillageMusicPlaying = false;
+  public currentVillageTrack = 0;
+  private villageMusicVolume = 0.85;
+
+  public startVillageMusic(trackIndex = 0) {
+    this.resume();
+    if (!this.ctx || !this.masterGain) return;
+    this.stopVillageMusic();
+
+    this.currentVillageTrack = trackIndex;
+    this.isVillageMusicPlaying = true;
+
+    // Spatial and track master gain
+    this.villageMusicGain = this.ctx.createGain();
+    this.villageMusicGain.gain.value = this.villageMusicVolume;
+
+    this.villageMusicSpatialGain = this.ctx.createGain();
+    this.villageMusicSpatialGain.gain.value = 1.0;
+
+    this.villageMusicGain.connect(this.villageMusicSpatialGain);
+    this.villageMusicSpatialGain.connect(this.masterGain);
+
+    // Track notes & scales
+    // Track 0: Bamboo Flute (Raag Bhupali / Folk Pentatonic: C4, D4, E4, G4, A4, C5)
+    // Track 1: Padma Folk (D4, F4, G4, A4, C5, D5)
+    // Track 2: Festival Dhol (Percussive bass pulses & lively treble riffs)
+    // Track 3: Countryside Acoustic (Gentle warm chord arpeggio)
+    const trackScales = [
+      [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33],
+      [293.66, 349.23, 392.00, 440.00, 523.25, 587.33, 659.25],
+      [196.00, 220.00, 261.63, 293.66, 392.00, 523.25],
+      [220.00, 261.63, 329.63, 392.00, 440.00, 523.25],
+    ];
+    const scale = trackScales[trackIndex % trackScales.length];
+    let step = 0;
+
+    const playNote = () => {
+      if (!this.ctx || !this.villageMusicGain || !this.isVillageMusicPlaying) return;
+      const now = this.ctx.currentTime;
+      const freq = scale[Math.floor(Math.random() * scale.length)];
+
+      const osc = this.ctx.createOscillator();
+      const noteGain = this.ctx.createGain();
+
+      if (trackIndex === 0) {
+        // Breathy Flute sound (sine + gentle lowpass filter)
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+        osc.frequency.linearRampToValueAtTime(freq * 1.01, now + 0.35);
+
+        noteGain.gain.setValueAtTime(0.01, now);
+        noteGain.gain.linearRampToValueAtTime(0.22, now + 0.08);
+        noteGain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+
+        osc.connect(noteGain);
+        noteGain.connect(this.villageMusicGain);
+        osc.start(now);
+        osc.stop(now + 0.6);
+      } else if (trackIndex === 2) {
+        // Festival Beat (Kick punch + bright melody bell)
+        if (step % 2 === 0) {
+          // Bass Kick
+          const kick = this.ctx.createOscillator();
+          const kickGain = this.ctx.createGain();
+          kick.type = 'triangle';
+          kick.frequency.setValueAtTime(140, now);
+          kick.frequency.exponentialRampToValueAtTime(35, now + 0.16);
+          kickGain.gain.setValueAtTime(0.4, now);
+          kickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+          kick.connect(kickGain);
+          kickGain.connect(this.villageMusicGain);
+          kick.start(now);
+          kick.stop(now + 0.2);
+        }
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, now);
+        noteGain.gain.setValueAtTime(0.12, now);
+        noteGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+        osc.connect(noteGain);
+        noteGain.connect(this.villageMusicGain);
+        osc.start(now);
+        osc.stop(now + 0.25);
+      } else {
+        // Acoustic Harmony
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now);
+        noteGain.gain.setValueAtTime(0.2, now);
+        noteGain.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+        osc.connect(noteGain);
+        noteGain.connect(this.villageMusicGain);
+        osc.start(now);
+        osc.stop(now + 0.52);
+      }
+
+      step++;
+    };
+
+    const intervalMs = trackIndex === 2 ? 260 : 380;
+    this.villageMusicInterval = window.setInterval(playNote, intervalMs);
+  }
+
+  public stopVillageMusic() {
+    this.isVillageMusicPlaying = false;
+    if (this.villageMusicInterval) {
+      clearInterval(this.villageMusicInterval);
+      this.villageMusicInterval = null;
+    }
+    if (this.villageMusicGain && this.ctx) {
+      try {
+        this.villageMusicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
+      } catch {}
+    }
+  }
+
+  public setVillageMusicVolume(vol: number) {
+    this.villageMusicVolume = Math.max(0, Math.min(1, vol));
+    if (this.villageMusicGain && this.ctx) {
+      this.villageMusicGain.gain.setValueAtTime(this.villageMusicVolume, this.ctx.currentTime);
+    }
+  }
+
+  public updateVillageMusicSpatial(playerDistToSpeaker: number) {
+    if (!this.villageMusicSpatialGain || !this.ctx || !this.isVillageMusicPlaying) return;
+    // Full volume within 16m of speaker, smoothly drops to 0 at 55m
+    let atten = 1.0;
+    if (playerDistToSpeaker > 16) {
+      atten = Math.max(0, 1.0 - (playerDistToSpeaker - 16) / 39);
+    }
+    this.villageMusicSpatialGain.gain.setTargetAtTime(atten, this.ctx.currentTime, 0.1);
+  }
 }
 
 export const soundManager = new SoundManager();

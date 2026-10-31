@@ -36,6 +36,7 @@ export interface GameEngineCallbacks {
   onOpenGameSignboard?: (signboard: GameSignboardConfig) => void;
   onPlayerLocationChanged?: (location: 'PRIVATE_HOME' | 'SHARED_CITY') => void;
   onStartFishingChallenge?: () => void;
+  onOpenVillageSpeaker?: () => void;
 }
 
 // Static preallocated scratch objects to eliminate per-frame GC heap churn
@@ -618,6 +619,11 @@ export class GameEngine {
     const wfDist = playerPos.distanceTo(_wfTarget);
     soundManager.updateAmbience(wfDist, this.weatherManager.weather === 'rain');
 
+    if (this.terrain.countrysideVillage) {
+      const speakerDist = playerPos.distanceTo(this.terrain.countrysideVillage.speakerPos);
+      soundManager.updateVillageMusicSpatial(speakerDist);
+    }
+
     // 9. Check Quest Distance Triggers
     this.questManager.checkProximityObjectives(
       { x: playerPos.x, y: playerPos.y, z: playerPos.z },
@@ -749,6 +755,63 @@ export class GameEngine {
         this.callbacks.onOpenGameSignboard?.(nearbySign);
       }
       return;
+    }
+
+    // 6. Check Village Outdoor Music Speaker System beside Giant Tree
+    if (this.terrain.countrysideVillage) {
+      const spk = this.terrain.countrysideVillage.speakerPos;
+      if (playerPos.distanceTo(spk) < 3.8) {
+        this.callbacks.onInteractionPrompt?.('[E] সাউন্ড সিস্টেম / Village Music Speaker System');
+        if (input.interact) {
+          soundManager.playCollectCoin();
+          this.callbacks.onOpenVillageSpeaker?.();
+        }
+        return;
+      }
+
+      // 7. Check Village Pond Wooden Fishing Platform
+      const pondPier = this.terrain.countrysideVillage.pondPierPos;
+      if (playerPos.distanceTo(pondPier) < 4.2) {
+        this.callbacks.onInteractionPrompt?.('[E] পুকুরে মাছ ধরুন / Fish in Village Pond');
+        if (input.interact) {
+          soundManager.playCollectCoin();
+          this.callbacks.onStartFishingChallenge?.();
+        }
+        return;
+      }
+
+      // 8. Check Dream World High School Gate
+      const schGate = this.terrain.countrysideVillage.schoolGatePos;
+      if (playerPos.distanceTo(schGate) < 4.0) {
+        this.callbacks.onInteractionPrompt?.('[E] ড্রিম ওয়ার্ল্ড হাই স্কুল / Dream World High School');
+        if (input.interact) {
+          soundManager.playCollectCoin();
+          this.callbacks.onNotification?.('ড্রিম ওয়ার্ল্ড হাই স্কুল ক্যাম্পাসে স্বাগতম! সুন্দর ফুটবল মাঠ ও খেলার জায়গা।', 'HIGH SCHOOL');
+        }
+        return;
+      }
+
+      // 9. Check Vegetable Garden & Tube-Well Shed
+      const shedPos = this.terrain.countrysideVillage.gardenShedPos;
+      if (playerPos.distanceTo(shedPos) < 3.8) {
+        this.callbacks.onInteractionPrompt?.('[E] সবজি বাগান ও টিউবওয়েল / Countryside Garden Harvest');
+        if (input.interact) {
+          soundManager.playCollectCoin();
+          this.callbacks.onNotification?.('তাজা মিষ্টি বেগুন, লালশাক ও ভুট্টা সংগ্রহ করা হয়েছে!', 'FARM FRESH');
+        }
+        return;
+      }
+
+      // 10. Check Hilltop Scenic Viewpoint Gazebo
+      const gazeboPos = this.terrain.countrysideVillage.hillGazeboPos;
+      if (playerPos.distanceTo(gazeboPos) < 4.5) {
+        this.callbacks.onInteractionPrompt?.('[E] পাহাড়চূড়ার ভিউপয়েন্ট গেজেবো / Scenic Overlook Gazebo');
+        if (input.interact) {
+          soundManager.playCollectCoin();
+          this.callbacks.onNotification?.('পাহাড়ের চূড়া থেকে পুকুর, প্লাজা ও পুরো গ্রামের মনোরম দৃশ্য উপভোগ করছেন!', 'SCENIC VIEW');
+        }
+        return;
+      }
     }
 
     // Clear prompt if no interactive target nearby
