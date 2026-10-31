@@ -17,6 +17,7 @@ import {
   Gauge,
   Trophy,
   Home,
+  Smartphone,
 } from 'lucide-react';
 import { PlayerStats } from '../types';
 import { ActiveVehicle } from '../vehicles/vehicleManager';
@@ -51,6 +52,7 @@ interface HUDProps {
   onUnlockAudio?: () => void;
   onOpenSettings: () => void;
   onOpenInventory?: () => void;
+  onOpenSmartphone?: () => void;
 }
 
 export const HUD: React.FC<HUDProps> = ({
@@ -82,6 +84,7 @@ export const HUD: React.FC<HUDProps> = ({
   onToggleDeafen,
   onUnlockAudio,
   onOpenSettings,
+  onOpenSmartphone,
 }) => {
   // Circular Mini-map calculations (Free Fire / PUBG radar scale)
   const miniMapRadius = 48; // pixels
@@ -175,6 +178,18 @@ export const HUD: React.FC<HUDProps> = ({
               className="w-9 h-9 rounded-2xl bg-slate-950/80 hover:bg-slate-900 border border-amber-500/50 shadow-xl flex items-center justify-center text-amber-400 active:scale-95 transition-all backdrop-blur-xs"
             >
               <Trophy className="w-4 h-4 text-amber-400" />
+            </button>
+          )}
+
+          {/* Smartphone Launcher Button (iPhone with Garage, Map, Wardrobe, Fishing, Settings) */}
+          {onOpenSmartphone && (
+            <button
+              onClick={onOpenSmartphone}
+              title="স্মার্টফোন ও গাড়ি ডেলিভারি / Smartphone Garage"
+              className="h-9 px-2.5 rounded-2xl bg-gradient-to-r from-sky-950 to-indigo-950 hover:from-sky-900 hover:to-indigo-900 border border-sky-400/60 shadow-xl flex items-center gap-1.5 text-sky-300 active:scale-95 transition-all backdrop-blur-xs"
+            >
+              <Smartphone className="w-4 h-4 text-sky-400" />
+              <span className="text-[11px] font-bold hidden sm:inline">ফোন</span>
             </button>
           )}
 

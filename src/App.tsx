@@ -36,6 +36,8 @@ import { GameDoorMetadata } from './game-house/gameRegistry';
 import { GameSignboardModal } from './game/ui/GameSignboardModal';
 import { ReturnHomeModal } from './game/ui/ReturnHomeModal';
 import { GameSignboardConfig } from './game/world/GameSignboard';
+import { SmartphoneModal } from './game/smartphone/SmartphoneModal';
+import { FishingChallengeModal } from './game/fishing/FishingChallengeModal';
 import { Bell, X } from 'lucide-react';
 
 export default function App() {
@@ -63,6 +65,8 @@ export default function App() {
   const [isSignboardModalOpen, setIsSignboardModalOpen] = useState(false);
   const [activeSignboard, setActiveSignboard] = useState<GameSignboardConfig | null>(null);
   const [isReturnHomeModalOpen, setIsReturnHomeModalOpen] = useState(false);
+  const [isSmartphoneOpen, setIsSmartphoneOpen] = useState(false);
+  const [isFishingChallengeOpen, setIsFishingChallengeOpen] = useState(false);
   const [playerLocation, setPlayerLocation] = useState<'PRIVATE_HOME' | 'SHARED_CITY'>('PRIVATE_HOME');
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [currentPlaytimeSeconds, setCurrentPlaytimeSeconds] = useState(0);
@@ -188,6 +192,9 @@ export default function App() {
       },
       onPlayerLocationChanged: (loc) => {
         setPlayerLocation(loc);
+      },
+      onStartFishingChallenge: () => {
+        setIsFishingChallengeOpen(true);
       },
     });
 
@@ -324,6 +331,12 @@ export default function App() {
   }, [gameState, currentUser]);
 
   const handleStartGame = (mode: 'single' | 'multiplayer') => {
+    if (!currentUser) {
+      setIsAuthOpen(true);
+      showToast('গেম খেলার আগে অনুগ্রহ করে আপনার নাম ও ইমেইল দিয়ে সাইন ইন করুন', 'SIGN IN REQUIRED');
+      return;
+    }
+
     setGameState('playing');
     // Automatically connect to the production multiplayer backend on start
     engineRef.current?.multiplayerManager.startOnlineMultiplayer();
@@ -478,6 +491,7 @@ export default function App() {
             }}
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenInventory={() => setIsInventoryOpen(true)}
+            onOpenSmartphone={() => setIsSmartphoneOpen(true)}
           />
 
           {/* On-Screen Mobile Joystick & Tactical HUD Controls */}
@@ -694,6 +708,62 @@ export default function App() {
           }
         }}
         onClose={() => setIsSignboardModalOpen(false)}
+      />
+
+      {/* In-Game Smartphone (iPhone Style with Dynamic Island & Garage App) */}
+      <SmartphoneModal
+        isOpen={isSmartphoneOpen}
+        playerName={currentUser?.displayName || 'Explorer'}
+        playerMoney={playerStats.money}
+        timeString={`${Math.floor(timeOfDay).toString().padStart(2, '0')}:${Math.floor((timeOfDay % 1) * 60).toString().padStart(2, '0')}`}
+        onSpawnVehicle={(type) => {
+          engineRef.current?.spawnVehicleNearPlayer(type);
+          showToast(`${type.toUpperCase()} গাড়ি রোডে স্পন হয়েছে!`, 'GARAGE');
+        }}
+        onOpenCustomizer={() => {
+          setIsSmartphoneOpen(false);
+          setIsCharacterSelectOpen(true);
+        }}
+        onOpenMap={() => {
+          setIsSmartphoneOpen(false);
+          setIsMapOpen(true);
+        }}
+        onOpenRankings={() => {
+          setIsSmartphoneOpen(false);
+          setIsRankingsOpen(true);
+        }}
+        onOpenChat={() => {
+          setIsSmartphoneOpen(false);
+          setIsChatOpen(true);
+        }}
+        onOpenSettings={() => {
+          setIsSmartphoneOpen(false);
+          setIsSettingsOpen(true);
+        }}
+        onStartFishing={() => {
+          setIsSmartphoneOpen(false);
+          setIsFishingChallengeOpen(true);
+        }}
+        onClose={() => setIsSmartphoneOpen(false)}
+      />
+
+      {/* 2-Minute Padma River Fishing Challenge Modal */}
+      <FishingChallengeModal
+        isOpen={isFishingChallengeOpen}
+        onFinishChallenge={(playerFish, rivalFish, rewardTaka, rewardExp) => {
+          if (playerFish > rivalFish) {
+            if (engineRef.current) {
+              engineRef.current.questManager.playerStats.money += rewardTaka;
+              engineRef.current.questManager.playerStats.exp += rewardExp;
+            }
+            showToast(`মাছ ধরার প্রতিযোগিতায় জয়ী হয়েছেন! পুরস্কার: ${rewardTaka} টাকা`, 'VICTORY');
+          } else if (playerFish === rivalFish) {
+            showToast('প্রতিযোগিতা ড্র হয়েছে! চমৎকার লড়াই।', 'DRAW');
+          } else {
+            showToast('কাসেম মাঝি জিতে গেছে! আবার চেষ্টা করুন।', 'FISHING FINISHED');
+          }
+        }}
+        onClose={() => setIsFishingChallengeOpen(false)}
       />
     </div>
   );

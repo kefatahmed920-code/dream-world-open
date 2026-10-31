@@ -34,43 +34,41 @@
         // 2. Intercept Vite HMR WebSocket client so it never attempts handshake failures
         const OriginalWebSocket = window.WebSocket;
         if (OriginalWebSocket) {
-          window.WebSocket = function (url, protocols) {
-            const isViteHmr = protocols === 'vite-hmr' ||
-              (Array.isArray(protocols) && protocols.includes('vite-hmr')) ||
-              (typeof url === 'string' && (url.includes('vite-hmr') || url.includes('/@vite/client')));
+          window.WebSocket = new Proxy(OriginalWebSocket, {
+            construct(target, args) {
+              const url = args[0];
+              const protocols = args[1];
+              const isViteHmr = protocols === 'vite-hmr' ||
+                (Array.isArray(protocols) && protocols.includes('vite-hmr')) ||
+                (typeof url === 'string' && (url.includes('vite-hmr') || url.includes('/@vite/client')));
 
-            if (isViteHmr) {
-              const dummyTarget = new EventTarget();
-              const dummyWs = {
-                readyState: 1, // OPEN to keep client quiet
-                CONNECTING: 0,
-                OPEN: 1,
-                CLOSING: 2,
-                CLOSED: 3,
-                url: String(url),
-                protocol: 'vite-hmr',
-                bufferedAmount: 0,
-                extensions: '',
-                binaryType: 'blob',
-                send: function () {},
-                close: function () {},
-                addEventListener: dummyTarget.addEventListener.bind(dummyTarget),
-                removeEventListener: dummyTarget.removeEventListener.bind(dummyTarget),
-                dispatchEvent: dummyTarget.dispatchEvent.bind(dummyTarget),
-                onopen: null,
-                onclose: null,
-                onerror: null,
-                onmessage: null,
-              };
-              return dummyWs;
+              if (isViteHmr) {
+                const dummyTarget = new EventTarget();
+                return {
+                  readyState: 1,
+                  CONNECTING: 0,
+                  OPEN: 1,
+                  CLOSING: 2,
+                  CLOSED: 3,
+                  url: String(url),
+                  protocol: 'vite-hmr',
+                  bufferedAmount: 0,
+                  extensions: '',
+                  binaryType: 'blob',
+                  send: function () {},
+                  close: function () {},
+                  addEventListener: dummyTarget.addEventListener.bind(dummyTarget),
+                  removeEventListener: dummyTarget.removeEventListener.bind(dummyTarget),
+                  dispatchEvent: dummyTarget.dispatchEvent.bind(dummyTarget),
+                  onopen: null,
+                  onclose: null,
+                  onerror: null,
+                  onmessage: null,
+                };
+              }
+              return Reflect.construct(target, args);
             }
-            return new OriginalWebSocket(url, protocols);
-          };
-          window.WebSocket.prototype = OriginalWebSocket.prototype;
-          window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
-          window.WebSocket.OPEN = OriginalWebSocket.OPEN;
-          window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
-          window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
+          });
         }
 
         // 3. Catch any remaining window error events

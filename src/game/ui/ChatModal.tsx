@@ -43,8 +43,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/70 backdrop-blur-xs pointer-events-auto select-none">
-      <div className="w-full max-w-md h-[460px] bg-slate-950/95 border-2 border-slate-700/80 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-fade-in">
+    <div className="fixed bottom-24 left-3 z-40 w-80 sm:w-96 max-w-[calc(100vw-24px)] h-[360px] pointer-events-auto select-none animate-fade-in">
+      <div className="w-full h-full bg-slate-950/80 backdrop-blur-md border border-slate-700/60 rounded-3xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/80">
           <div className="flex items-center gap-2.5">

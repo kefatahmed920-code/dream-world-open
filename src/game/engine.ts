@@ -857,7 +857,7 @@ export class GameEngine {
       type,
       spawnPos,
       this.playerRotation,
-      (x, z, y) => this.terrain.getTerrainHeight(x, z, y),
+      (x: number, z: number) => this.terrain.getTerrainHeight(x, z),
     );
 
     soundManager.playRadioBeep(true);

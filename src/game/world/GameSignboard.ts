@@ -52,6 +52,8 @@ export const DEFAULT_SIGNBOARDS: GameSignboardConfig[] = [
  */
 export class GameSignboardManager {
   public group: THREE.Group;
+  public signboards: GameSignboardConfig[] = [];
+  public obstacles: WorldObstacle[] = [];
   private animatedEmblems: THREE.Mesh[] = [];
   private floatingRings: THREE.Mesh[] = [];
 

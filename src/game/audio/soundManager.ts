@@ -264,8 +264,12 @@ class SoundManager {
     osc.stop(now + 0.18);
   }
 
+  public playLevelUp() {
+    this.playQuestComplete();
+  }
+
   // --- VEHICLE ENGINE ---
-  public startVehicleEngine(vehicleType: 'cng' | 'car' | 'bike') {
+  public startVehicleEngine(vehicleType: 'cng' | 'car' | 'bike' | 'bus' | 'boat' | string) {
     this.resume();
     if (!this.ctx || !this.sfxGain || this.isEngineRunning) return;
 

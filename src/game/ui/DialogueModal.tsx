@@ -47,54 +47,55 @@ export const DialogueModal: React.FC<DialogueModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none pointer-events-auto">
-      <div className="w-full max-w-xl bg-slate-900 border-2 border-emerald-500/60 rounded-3xl p-5 md:p-6 shadow-2xl relative overflow-hidden flex flex-col gap-4">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-3xl pointer-events-auto select-none animate-fade-in">
+      <div className="w-full bg-slate-950/85 backdrop-blur-md border-2 border-emerald-500/70 rounded-3xl p-4 md:p-5 shadow-2xl relative overflow-hidden flex flex-col gap-3">
         {/* Header: NPC Identity */}
-        <div className="flex items-start justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-950/80 border border-emerald-600/50 flex items-center justify-center text-emerald-400">
-              <MessageSquare className="w-6 h-6" />
+        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-emerald-950/90 border border-emerald-500/60 flex items-center justify-center text-emerald-400">
+              <MessageSquare className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-base font-bold text-white">{node.speaker}</span>
-                <span className="text-xs text-emerald-400 font-medium">({npc.config.nameBn})</span>
+                <span className="text-sm md:text-base font-bold text-white tracking-wide">{node.speaker}</span>
+                <span className="text-xs text-emerald-400 font-semibold">({npc.config.nameBn})</span>
               </div>
-              <div className="text-xs text-slate-400 font-medium">{node.speakerTitle}</div>
+              <div className="text-[11px] text-slate-400 font-medium">{node.speakerTitle}</div>
             </div>
           </div>
 
           <button
             onClick={onClose}
             className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+            title="Close Dialogue"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Dialogue Speech Body */}
-        <div className="space-y-2 py-1">
-          <div className="text-sm md:text-base text-slate-100 leading-relaxed">
+        {/* Subtitle Dialogue Speech Body - Cinematic Large Clear Typography */}
+        <div className="space-y-1.5 py-1">
+          <div className="text-base md:text-xl text-white font-bold leading-relaxed drop-shadow-sm">
             "{node.text}"
           </div>
           {node.textBn && (
-            <div className="text-xs md:text-sm text-emerald-300/90 font-medium leading-relaxed italic">
+            <div className="text-sm md:text-base text-emerald-300 font-semibold leading-relaxed drop-shadow-sm">
               "{node.textBn}"
             </div>
           )}
         </div>
 
         {/* Interactive Response Options */}
-        <div className="flex flex-col gap-2 pt-2 border-t border-slate-800/80">
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-800/80">
           {node.options.map((opt: typeof node.options[0], idx: number) => (
             <button
               key={idx}
               onClick={() => handleOptionClick(opt)}
-              className="w-full text-left p-3 rounded-2xl bg-slate-800/90 hover:bg-emerald-900/40 border border-slate-700 hover:border-emerald-500/80 text-xs md:text-sm text-slate-200 hover:text-emerald-300 font-semibold flex items-center justify-between transition-all group"
+              className="flex-1 min-w-[200px] text-left px-3.5 py-2.5 rounded-2xl bg-slate-900/90 hover:bg-emerald-900/40 border border-slate-700/80 hover:border-emerald-500/80 text-xs md:text-sm text-slate-100 hover:text-emerald-200 font-semibold flex items-center justify-between transition-all group"
             >
               <span>{opt.label}</span>
-              <span className="text-xs text-slate-500 group-hover:text-emerald-400">
-                [Select]
+              <span className="text-[10px] text-slate-500 group-hover:text-emerald-400 font-mono ml-2">
+                [CLICK]
               </span>
             </button>
           ))}

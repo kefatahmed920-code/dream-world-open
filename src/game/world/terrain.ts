@@ -1753,6 +1753,29 @@ export class WorldTerrain {
    * Region B: Bengali Countryside & Shonar Village
    */
   private buildVillageRegion() {
+    // East Connecting Road (connecting Kaifeng bridge exit at X = 125 to village and mountain highway at X = 195)
+    const eastRoadGeo = new THREE.PlaneGeometry(70, 16);
+    eastRoadGeo.rotateX(-Math.PI / 2);
+    const eastRoadMat = new THREE.MeshStandardMaterial({
+      map: createRoadTexture(),
+      roughness: 0.85,
+      metalness: 0.1,
+    });
+    const eastRoad = new THREE.Mesh(eastRoadGeo, eastRoadMat);
+    eastRoad.position.set(160, 0.04, 3.0);
+    eastRoad.receiveShadow = true;
+    this.group.add(eastRoad);
+
+    // Sidewalks / Shoulders for East Road
+    const shoulderMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.9 });
+    [-1, 1].forEach((side) => {
+      const shGeo = new THREE.BoxGeometry(70, 0.16, 2.5);
+      const sh = new THREE.Mesh(shGeo, shoulderMat);
+      sh.position.set(160, 0.08, 3.0 + side * 9.25);
+      sh.receiveShadow = true;
+      this.group.add(sh);
+    });
+
     const villageHuts = [
       { x: 150, z: 75, rot: 0.3 },
       { x: 175, z: 85, rot: -0.2 },
