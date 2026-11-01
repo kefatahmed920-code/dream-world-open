@@ -53,6 +53,7 @@ interface HUDProps {
   onOpenSettings: () => void;
   onOpenInventory?: () => void;
   onOpenSmartphone?: () => void;
+  onReturnToLobby?: () => void;
 }
 
 export const HUD: React.FC<HUDProps> = ({
@@ -85,6 +86,7 @@ export const HUD: React.FC<HUDProps> = ({
   onUnlockAudio,
   onOpenSettings,
   onOpenSmartphone,
+  onReturnToLobby,
 }) => {
   // Circular Mini-map calculations (Free Fire / PUBG radar scale)
   const miniMapRadius = 48; // pixels
@@ -302,8 +304,20 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
         </div>
 
-        {/* --- TOP RIGHT: SETTINGS & CIRCULAR RADAR MINIMAP --- */}
+        {/* --- TOP RIGHT: LOBBY, SETTINGS & CIRCULAR RADAR MINIMAP --- */}
         <div className="flex items-start gap-1.5 pointer-events-auto">
+          {/* Return to Lobby Button */}
+          {onReturnToLobby && (
+            <button
+              onClick={onReturnToLobby}
+              title="Return to Main Lobby (লবি)"
+              className="px-2.5 h-9 rounded-2xl bg-amber-500/90 hover:bg-amber-400 border border-amber-300/80 shadow-xl flex items-center gap-1.5 text-slate-950 font-black text-xs active:scale-95 transition-all"
+            >
+              <Home className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">LOBBY</span>
+            </button>
+          )}
+
           {/* Pause / Settings Button */}
           <button
             onClick={onOpenSettings}

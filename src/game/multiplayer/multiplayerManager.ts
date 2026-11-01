@@ -131,7 +131,7 @@ export class MultiplayerManager {
   public currentRoom = 'Dhaka-Hub-1';
   public serverPlayerCount = 1;
   public latencyMs = 0;
-  public locationState: 'PRIVATE_HOME' | 'SHARED_CITY' = 'PRIVATE_HOME';
+  public locationState: 'PRIVATE_HOME' | 'SHARED_CITY' = 'SHARED_CITY';
   public remotePlayers: Map<string, RemotePlayerActor> = new Map();
 
   private scene: THREE.Scene;
@@ -652,19 +652,10 @@ export class MultiplayerManager {
       this.sendPing();
     }
 
-    // Update all remote players and enforce private home isolation
-    const isLocalInHome = this.locationState === 'PRIVATE_HOME';
+    // Update all remote players in the shared open world
     for (const actor of this.remotePlayers.values()) {
       actor.update(delta);
-
-      // Isolation rules:
-      // - Inside Private Home: local player sees NO remote players
-      // - Outside in Shared City: local player sees city players, but NOT players inside private homes
-      if (isLocalInHome) {
-        actor.setVisibility(false);
-      } else {
-        actor.setVisibility(!actor.inPrivateHome);
-      }
+      actor.setVisibility(true);
     }
   }
 

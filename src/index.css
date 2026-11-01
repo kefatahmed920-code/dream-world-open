@@ -1,1 +1,31 @@
 @import "tailwindcss";
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #020617;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Landscape Mobile Display Cutout Support */
+.safe-area-left {
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+}
+.safe-area-right {
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+}
+.safe-area-top {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+.safe-area-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}

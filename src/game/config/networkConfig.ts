@@ -31,15 +31,16 @@ export class NetworkConfig {
       return envUrl.replace(/\/+$/, '');
     }
 
-    // 3. If running locally on localhost, use local server origin
+    // 3. If running on same fullstack origin (Cloud Run, AI Studio container, localhost, custom domain)
     if (typeof window !== 'undefined') {
       const hostname = window.location.hostname;
-      if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') {
+      // Prioritize the actual current fullstack server unless on static GitHub Pages
+      if (hostname && !hostname.endsWith('github.io')) {
         return window.location.origin;
       }
     }
 
-    // 4. Default for production, GitHub Pages, Android PWA, and all external players
+    // 4. Default fallback for static GitHub Pages
     return DEFAULT_PRODUCTION_BACKEND;
   }
 

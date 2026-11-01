@@ -15,6 +15,7 @@ interface SettingsModalProps {
   onSetTimeOfDay: (time: number) => void;
   onSetWeather: (weather: WeatherType) => void;
   onSaveGame: () => void;
+  onExitToLobby?: () => void;
   onClose: () => void;
 }
 
@@ -25,6 +26,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSetTimeOfDay,
   onSetWeather,
   onSaveGame,
+  onExitToLobby,
   onClose,
 }) => {
   const qualities: GraphicsQuality[] = ['low', 'medium', 'high', 'ultra'];
@@ -154,7 +156,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {/* Save Game Progress */}
-          <div className="pt-2">
+          <div className="pt-2 space-y-2">
             <button
               onClick={() => {
                 soundManager.playUiClick();
@@ -164,6 +166,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             >
               <Save className="w-4 h-4" /> Save Game Progress to Device
             </button>
+
+            {onExitToLobby && (
+              <button
+                onClick={() => {
+                  soundManager.playUiClick();
+                  onExitToLobby();
+                }}
+                className="w-full py-2.5 rounded-2xl bg-slate-800 hover:bg-red-950/60 border border-slate-700 hover:border-red-500/60 text-slate-300 hover:text-red-300 text-xs font-black tracking-wider uppercase flex items-center justify-center gap-2 transition-all active:scale-98"
+              >
+                <span>Exit to Main Lobby (লবিতে ফিরে যান)</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -69,7 +69,7 @@ export default function App() {
   const [isSmartphoneOpen, setIsSmartphoneOpen] = useState(false);
   const [isFishingChallengeOpen, setIsFishingChallengeOpen] = useState(false);
   const [isVillageSpeakerOpen, setIsVillageSpeakerOpen] = useState(false);
-  const [playerLocation, setPlayerLocation] = useState<'PRIVATE_HOME' | 'SHARED_CITY'>('PRIVATE_HOME');
+  const [playerLocation, setPlayerLocation] = useState<'PRIVATE_HOME' | 'SHARED_CITY'>('SHARED_CITY');
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [currentPlaytimeSeconds, setCurrentPlaytimeSeconds] = useState(0);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -433,7 +433,7 @@ export default function App() {
   };
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-slate-950 font-sans select-none">
+    <div className="fixed inset-0 w-full h-full overflow-hidden bg-slate-950 font-sans select-none">
       {/* 3D WebGL Canvas Container - Isolated Ref container */}
       <div ref={canvasMountRef} className="absolute inset-0 z-0 w-full h-full" />
 
@@ -453,6 +453,12 @@ export default function App() {
           onOpenInventory={() => setIsInventoryOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenMultiplayer={() => setIsMultiplayerOpen(true)}
+          onOpenStats={() => setIsStatsOpen(true)}
+          onOpenRankings={() => setIsRankingsOpen(true)}
+          onOpenChat={() => setIsChatOpen(true)}
+          appearance={playerAppearance}
+          playerStats={playerStats}
+          currentRoom={engineRef.current?.multiplayerManager.currentRoom || 'Dhaka-Hub-1'}
         />
       )}
 
@@ -497,6 +503,7 @@ export default function App() {
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenInventory={() => setIsInventoryOpen(true)}
             onOpenSmartphone={() => setIsSmartphoneOpen(true)}
+            onReturnToLobby={() => setGameState('title')}
           />
 
           {/* On-Screen Mobile Joystick & Tactical HUD Controls */}
@@ -580,6 +587,10 @@ export default function App() {
           onSetTimeOfDay={handleSetTimeOfDay}
           onSetWeather={handleSetWeather}
           onSaveGame={handleSaveGame}
+          onExitToLobby={() => {
+            setIsSettingsOpen(false);
+            setGameState('title');
+          }}
           onClose={() => setIsSettingsOpen(false)}
         />
       )}

@@ -22,8 +22,8 @@ export default defineConfig(() => {
             'A realistic third-person 3D open-world adventure inspired by Bangladesh with vehicles, quests, and offline play.',
           theme_color: '#020617',
           background_color: '#020617',
-          display: 'standalone',
-          orientation: 'any',
+          display: 'fullscreen',
+          orientation: 'landscape',
           start_url: '/dream-world-open/',
           scope: '/dream-world-open/',
           icons: [
