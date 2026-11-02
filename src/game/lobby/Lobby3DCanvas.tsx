@@ -6,17 +6,22 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { CharacterRig, CharacterAppearance } from '../character/characterModel';
+import { TeddyBearCompanion, TeddyBearType, PetToyAccessory } from '../character/TeddyBearCompanion';
 import { PetCompanionModel, PetType } from './PetCompanionModel';
+
+export type AnyLobbyPetType = TeddyBearType | PetType;
 
 interface Lobby3DCanvasProps {
   appearance: CharacterAppearance;
-  petType: PetType;
+  petType: AnyLobbyPetType;
+  petAccessory?: PetToyAccessory;
   isAutoRotating?: boolean;
 }
 
 export const Lobby3DCanvas: React.FC<Lobby3DCanvasProps> = ({
   appearance,
   petType,
+  petAccessory = 'none',
   isAutoRotating = false,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -25,20 +30,19 @@ export const Lobby3DCanvas: React.FC<Lobby3DCanvasProps> = ({
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
     rig: CharacterRig | null;
-    pet: PetCompanionModel | null;
-    stageGroup: THREE.Group;
-    particlesMesh: THREE.Points;
-    hologramRing1: THREE.Mesh;
-    hologramRing2: THREE.Mesh;
-    rotationAngle: number;
-    rotationVelocity: number;
+    teddyPet: TeddyBearCompanion | null;
+    dronePet: PetCompanionModel | null;
+    characterRotatorGroup: THREE.Group;
+    yawAngle: number;
+    pitchAngle: number;
+    yawVelocity: number;
     isDragging: boolean;
-    lastMouseX: number;
+    lastX: number;
+    lastY: number;
     frameId: number;
     lastTime: number;
   } | null>(null);
 
-  // Initialize Three.js Lobby Scene
   useEffect(() => {
     if (!mountRef.current) return;
     const container = mountRef.current;
@@ -46,252 +50,244 @@ export const Lobby3DCanvas: React.FC<Lobby3DCanvasProps> = ({
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
 
-    // 1. Scene & Camera Setup
+    // 1. Scene & Atmosphere Setup - Clean, High-End Game Studio Backdrop
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x030712); // Deep futuristic slate-night
-    scene.fog = new THREE.FogExp2(0x030712, 0.08);
+    scene.background = new THREE.Color(0x1e293b); // Sleek modern slate-blue gradient sky
+    scene.fog = new THREE.FogExp2(0x1e293b, 0.008);
 
-    const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
-    // Framed for landscape-first full body character & pet visibility
+    // 2. Camera Setup (Optimized to showcase character full-body in center)
+    const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 500);
     camera.position.set(0, 1.15, 3.8);
     camera.lookAt(0, 0.88, 0);
 
-    // 2. WebGL Renderer
+    // 3. WebGL Renderer
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
-      alpha: false,
       powerPreference: 'high-performance',
+      alpha: true,
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25;
+    renderer.toneMappingExposure = 1.35;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     container.appendChild(renderer.domElement);
 
-    // 3. Cinematic Studio & Rim Lighting (PUBG/Free Fire lobby aesthetic)
-    const ambientLight = new THREE.AmbientLight(0x0f172a, 2.2);
+    // 4. Studio & Atmospheric Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
     scene.add(ambientLight);
 
-    // Key front-angled warm spotlight
-    const keyLight = new THREE.DirectionalLight(0xffedd5, 2.8);
-    keyLight.position.set(2.5, 4.0, 3.5);
+    const hemiLight = new THREE.HemisphereLight(0xbae6fd, 0x0f172a, 1.2);
+    scene.add(hemiLight);
+
+    // Key Light: Crisp Sun/Studio Spotlight
+    const keyLight = new THREE.DirectionalLight(0xfff7ed, 2.8);
+    keyLight.position.set(4, 8, 6);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 1024;
     keyLight.shadow.mapSize.height = 1024;
     keyLight.shadow.bias = -0.0002;
     scene.add(keyLight);
 
-    // Fill cyan cool light
-    const fillLight = new THREE.DirectionalLight(0x38bdf8, 1.8);
-    fillLight.position.set(-3.2, 2.5, 2.0);
+    // Cyan Fill Light from lower left
+    const fillLight = new THREE.DirectionalLight(0x38bdf8, 1.4);
+    fillLight.position.set(-5, 3, 4);
     scene.add(fillLight);
 
-    // Gold/Amber rear rim light for silhouette edge glow
-    const rimLight = new THREE.DirectionalLight(0xf59e0b, 2.4);
-    rimLight.position.set(0, 3.2, -3.0);
+    // Golden Rim Light behind hero (creates premium character silhouette glow)
+    const rimLight = new THREE.DirectionalLight(0xf59e0b, 2.5);
+    rimLight.position.set(0, 5, -6);
     scene.add(rimLight);
 
-    // Pedestal accent glow
-    const pedestalLight = new THREE.PointLight(0x10b981, 1.6, 3.5);
-    pedestalLight.position.set(0, 0.2, 0);
-    scene.add(pedestalLight);
+    // 5. STATIC PLATFORM / PODIUM UNDER FEET (DOES NOT ROTATE!)
+    // As explicitly requested: "ক্যারেক্টারে পায়ের নিচে জায়গাটা না নড়ে"
+    const staticPodium = new THREE.Group();
 
-    // 4. Futuristic Podium & Holographic Pedestal
-    const stageGroup = new THREE.Group();
-
-    // Metallic Chamfered Podium
-    const podGeo = new THREE.CylinderGeometry(1.25, 1.45, 0.16, 48);
-    const podMat = new THREE.MeshStandardMaterial({
-      color: 0x0f172a,
-      metalness: 0.88,
-      roughness: 0.22,
+    // Main Circular Terrace Pavement (Ground)
+    const terraceGeo = new THREE.CylinderGeometry(3.5, 3.8, 0.25, 64);
+    const terraceMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a, // Deep carbon slate
+      roughness: 0.45,
+      metalness: 0.5,
     });
-    const podium = new THREE.Mesh(podGeo, podMat);
-    podium.position.y = -0.08;
-    podium.receiveShadow = true;
-    stageGroup.add(podium);
+    const terrace = new THREE.Mesh(terraceGeo, terraceMat);
+    terrace.position.y = -0.125;
+    terrace.receiveShadow = true;
+    staticPodium.add(terrace);
 
-    // Inner glowing ring
-    const innerRingGeo = new THREE.RingGeometry(1.05, 1.15, 48);
-    const innerRingMat = new THREE.MeshBasicMaterial({
-      color: 0x10b981,
-      side: THREE.DoubleSide,
-    });
-    const innerRing = new THREE.Mesh(innerRingGeo, innerRingMat);
-    innerRing.rotation.x = -Math.PI / 2;
-    innerRing.position.y = 0.003;
-    stageGroup.add(innerRing);
-
-    // Outer rotating holographic cyber reticles
-    const ring1Geo = new THREE.RingGeometry(1.48, 1.54, 48);
-    const ring1Mat = new THREE.MeshBasicMaterial({
-      color: 0x38bdf8,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.7,
-    });
-    const hologramRing1 = new THREE.Mesh(ring1Geo, ring1Mat);
-    hologramRing1.rotation.x = -Math.PI / 2;
-    hologramRing1.position.y = 0.005;
-    stageGroup.add(hologramRing1);
-
-    const ring2Geo = new THREE.RingGeometry(1.68, 1.72, 48);
-    const ring2Mat = new THREE.MeshBasicMaterial({
+    // Inner Glowing Concentric Orange/Gold Rings (Stationary on floor)
+    const goldGlowMat = new THREE.MeshStandardMaterial({
       color: 0xf59e0b,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.5,
-    });
-    const hologramRing2 = new THREE.Mesh(ring2Geo, ring2Mat);
-    hologramRing2.rotation.x = -Math.PI / 2;
-    hologramRing2.position.y = 0.006;
-    stageGroup.add(hologramRing2);
-
-    // Surrounding Floor Grid
-    const floorGeo = new THREE.PlaneGeometry(16, 16);
-    const floorCanvas = document.createElement('canvas');
-    floorCanvas.width = 256;
-    floorCanvas.height = 256;
-    const fCtx = floorCanvas.getContext('2d')!;
-    fCtx.fillStyle = '#020617';
-    fCtx.fillRect(0, 0, 256, 256);
-    fCtx.strokeStyle = 'rgba(56, 189, 248, 0.12)';
-    fCtx.lineWidth = 1.5;
-    fCtx.strokeRect(0, 0, 256, 256);
-
-    const floorTex = new THREE.CanvasTexture(floorCanvas);
-    floorTex.wrapS = THREE.RepeatWrapping;
-    floorTex.wrapT = THREE.RepeatWrapping;
-    floorTex.repeat.set(12, 12);
-
-    const floorMat = new THREE.MeshStandardMaterial({
-      map: floorTex,
-      roughness: 0.4,
-      metalness: 0.6,
-    });
-    const floor = new THREE.Mesh(floorGeo, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = -0.16;
-    floor.receiveShadow = true;
-    scene.add(floor);
-
-    // 5. Overhead Sci-Fi Backdrop Wall & Holographic Banner
-    const bannerGroup = new THREE.Group();
-    bannerGroup.position.set(0, 1.6, -2.8);
-
-    const bCanvas = document.createElement('canvas');
-    bCanvas.width = 512;
-    bCanvas.height = 128;
-    const bCtx = bCanvas.getContext('2d')!;
-    bCtx.fillStyle = 'rgba(2, 6, 23, 0.6)';
-    bCtx.fillRect(0, 0, 512, 128);
-    bCtx.strokeStyle = '#38bdf8';
-    bCtx.lineWidth = 4;
-    bCtx.strokeRect(8, 8, 496, 112);
-
-    bCtx.fillStyle = '#f59e0b';
-    bCtx.font = '900 36px Impact, Arial Black, sans-serif';
-    bCtx.textAlign = 'center';
-    bCtx.fillText('DREAM WORLD', 256, 52);
-
-    bCtx.fillStyle = '#38bdf8';
-    bCtx.font = 'bold 18px "Segoe UI", Arial, sans-serif';
-    bCtx.fillText('DHAKA BATTLEGROUNDS & COUNTRYSIDE', 256, 90);
-
-    const bannerTex = new THREE.CanvasTexture(bCanvas);
-    bannerTex.colorSpace = THREE.SRGBColorSpace;
-    const bannerMat = new THREE.MeshBasicMaterial({
-      map: bannerTex,
-      transparent: true,
-      opacity: 0.75,
+      emissive: 0xd97706,
+      emissiveIntensity: 1.1,
+      roughness: 0.2,
       side: THREE.DoubleSide,
     });
-    const banner = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.9), bannerMat);
-    bannerGroup.add(banner);
-    scene.add(bannerGroup);
 
-    // 6. Floating Cyber Dust Particles (Ambient Sci-Fi Vibe)
-    const particleCount = 120;
-    const pGeo = new THREE.BufferGeometry();
-    const pPos = new Float32Array(particleCount * 3);
-    for (let i = 0; i < particleCount * 3; i += 3) {
-      pPos[i] = (Math.random() - 0.5) * 5.0;
-      pPos[i + 1] = Math.random() * 3.0;
-      pPos[i + 2] = (Math.random() - 0.5) * 4.0;
+    const innerRing = new THREE.Mesh(new THREE.RingGeometry(0.85, 0.92, 64), goldGlowMat);
+    innerRing.rotation.x = -Math.PI / 2;
+    innerRing.position.y = 0.002;
+    staticPodium.add(innerRing);
+
+    const outerRing = new THREE.Mesh(new THREE.RingGeometry(1.45, 1.52, 64), goldGlowMat);
+    outerRing.rotation.x = -Math.PI / 2;
+    outerRing.position.y = 0.003;
+    staticPodium.add(outerRing);
+
+    // Clean Perimeter Railings & Neon Posts (Stationary)
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.85, roughness: 0.2 });
+    const lampMat = new THREE.MeshStandardMaterial({
+      color: 0xfacc15,
+      emissive: 0xeab308,
+      emissiveIntensity: 0.9,
+    });
+
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      const rx = Math.cos(a) * 3.4;
+      const rz = Math.sin(a) * 3.4;
+
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.4, 8), railMat);
+      post.position.set(rx, 0.2, rz);
+      post.castShadow = true;
+      staticPodium.add(post);
+
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.07), lampMat);
+      lamp.position.set(rx, 0.43, rz);
+      staticPodium.add(lamp);
     }
-    pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-    const pMat = new THREE.PointsMaterial({
-      color: 0x38bdf8,
-      size: 0.04,
-      transparent: true,
-      opacity: 0.65,
-      blending: THREE.AdditiveBlending,
-    });
-    const particlesMesh = new THREE.Points(pGeo, pMat);
-    scene.add(particlesMesh);
 
-    // 7. Add 3D Character Rig
+    const topRailGeo = new THREE.TorusGeometry(3.4, 0.022, 8, 48);
+    const topRail = new THREE.Mesh(topRailGeo, railMat);
+    topRail.rotation.x = Math.PI / 2;
+    topRail.position.y = 0.38;
+    staticPodium.add(topRail);
+
+    // Soft Studio Floor Glow Light
+    const floorSpot = new THREE.PointLight(0xf59e0b, 1.2, 4.0);
+    floorSpot.position.set(0, 0.2, 0);
+    staticPodium.add(floorSpot);
+
+    scene.add(staticPodium);
+
+    // 6. ROTATING CHARACTER & COMPANION GROUP
+    // Only this group rotates when dragged, while the ground stays static!
+    const characterRotatorGroup = new THREE.Group();
+
+    // 3D Player Character Rig
     const rig = new CharacterRig(appearance);
     rig.group.position.set(0, 0, 0);
-    stageGroup.add(rig.group);
+    characterRotatorGroup.add(rig.group);
 
-    // 8. Add Pet Companion beside character
-    const pet = new PetCompanionModel(petType);
-    pet.group.position.set(0.68, 0, 0.15);
-    pet.group.rotation.y = -0.35;
-    stageGroup.add(pet.group);
+    // Equipped Companion (Teddy Bear or Aero Drone)
+    let teddyPet: TeddyBearCompanion | null = null;
+    let dronePet: PetCompanionModel | null = null;
 
-    scene.add(stageGroup);
+    if (petType === 'aero_drone') {
+      // Previous beloved Aero Hover Drone
+      dronePet = new PetCompanionModel('aero_drone');
+      dronePet.group.position.set(0.72, 0.3, 0.2);
+      characterRotatorGroup.add(dronePet.group);
+    } else if (petType === 'cyber_fox' || petType === 'tiger_cub') {
+      dronePet = new PetCompanionModel(petType);
+      dronePet.group.position.set(0.68, 0, 0.2);
+      characterRotatorGroup.add(dronePet.group);
+    } else {
+      // Teddy Bear Companions (Cyber Neon, Classic Honey, Panda, Golden Hero)
+      const validTeddy: TeddyBearType = [
+        'cyber_neon',
+        'classic_honey',
+        'panda_bear',
+        'golden_hero',
+      ].includes(petType as TeddyBearType)
+        ? (petType as TeddyBearType)
+        : 'cyber_neon';
 
+      teddyPet = new TeddyBearCompanion(validTeddy, petAccessory);
+      teddyPet.group.position.set(0.68, 0, 0.2);
+      teddyPet.group.rotation.y = -0.3;
+      characterRotatorGroup.add(teddyPet.group);
+    }
+
+    scene.add(characterRotatorGroup);
+
+    // 7. CLEAN ATMOSPHERIC BACKGROUND (No distracting fantasy citadel/waterfalls)
+    // Distant soft horizon ring & sky dome
+    const horizonGeo = new THREE.CylinderGeometry(140, 140, 45, 32, 1, true);
+    const horizonMat = new THREE.MeshBasicMaterial({
+      color: 0x091426,
+      side: THREE.BackSide,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const horizonMesh = new THREE.Mesh(horizonGeo, horizonMat);
+    horizonMesh.position.y = 10;
+    scene.add(horizonMesh);
+
+    // Save Refs
     stateRef.current = {
       renderer,
       scene,
       camera,
       rig,
-      pet,
-      stageGroup,
-      particlesMesh,
-      hologramRing1,
-      hologramRing2,
-      rotationAngle: 0,
-      rotationVelocity: 0,
+      teddyPet,
+      dronePet,
+      characterRotatorGroup,
+      yawAngle: 0,
+      pitchAngle: 0.15,
+      yawVelocity: 0,
       isDragging: false,
-      lastMouseX: 0,
+      lastX: 0,
+      lastY: 0,
       frameId: 0,
       lastTime: performance.now(),
     };
 
-    // 9. Touch & Drag Event Handlers for 360° Character Rotation
+    // 8. DUAL-AXIS TOUCH & MOUSE DRAGGING (Rotates character smoothly in 360°)
+    const dom = renderer.domElement;
+
     const onPointerDown = (e: MouseEvent | TouchEvent) => {
-      if (!stateRef.current) return;
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+      if (!stateRef.current) return;
       stateRef.current.isDragging = true;
-      stateRef.current.lastMouseX = clientX;
-      stateRef.current.rotationVelocity = 0;
+      stateRef.current.lastX = clientX;
+      stateRef.current.lastY = clientY;
+      stateRef.current.yawVelocity = 0;
     };
 
     const onPointerMove = (e: MouseEvent | TouchEvent) => {
       if (!stateRef.current || !stateRef.current.isDragging) return;
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-      const deltaX = clientX - stateRef.current.lastMouseX;
-      stateRef.current.lastMouseX = clientX;
+      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
 
-      const rotSpeed = 0.008;
-      stateRef.current.rotationAngle += deltaX * rotSpeed;
-      stateRef.current.rotationVelocity = deltaX * rotSpeed;
+      const dx = clientX - stateRef.current.lastX;
+      const dy = clientY - stateRef.current.lastY;
+
+      stateRef.current.lastX = clientX;
+      stateRef.current.lastY = clientY;
+
+      // Rotate character horizontally
+      const sensitivity = 0.007;
+      stateRef.current.yawAngle += dx * sensitivity;
+      stateRef.current.yawVelocity = dx * sensitivity * 0.4;
+
+      // Slight camera pitch tilt (clamped safely so hero remains heroically framed)
+      stateRef.current.pitchAngle = THREE.MathUtils.clamp(
+        stateRef.current.pitchAngle - dy * 0.003,
+        0.05,
+        0.35,
+      );
     };
 
     const onPointerUp = () => {
-      if (stateRef.current) {
-        stateRef.current.isDragging = false;
-      }
+      if (!stateRef.current) return;
+      stateRef.current.isDragging = false;
     };
 
-    const dom = renderer.domElement;
     dom.addEventListener('mousedown', onPointerDown);
     window.addEventListener('mousemove', onPointerMove);
     window.addEventListener('mouseup', onPointerUp);
@@ -300,84 +296,73 @@ export const Lobby3DCanvas: React.FC<Lobby3DCanvasProps> = ({
     window.addEventListener('touchmove', onPointerMove, { passive: true });
     window.addEventListener('touchend', onPointerUp, { passive: true });
 
-    // 10. Responsive Resize Handler
+    // 9. RESIZE HANDLER
     const handleResize = () => {
-      if (!stateRef.current || !mountRef.current) return;
-      const w = mountRef.current.clientWidth || window.innerWidth;
-      const h = mountRef.current.clientHeight || window.innerHeight;
-      const aspect = w / h;
-      stateRef.current.camera.aspect = aspect;
+      if (!container || !stateRef.current) return;
+      const w = container.clientWidth || window.innerWidth;
+      const h = container.clientHeight || window.innerHeight;
+      if (w === 0 || h === 0) return;
 
-      // Dynamically optimize camera framing for mobile landscape viewports
-      if (aspect >= 1.6) {
-        stateRef.current.camera.position.set(0, 1.08, 3.4);
-        stateRef.current.camera.lookAt(0, 0.86, 0);
+      stateRef.current.camera.aspect = w / h;
+      if (w < 700) {
+        stateRef.current.camera.fov = 48;
       } else {
-        stateRef.current.camera.position.set(0, 1.15, 3.8);
-        stateRef.current.camera.lookAt(0, 0.88, 0);
+        stateRef.current.camera.fov = 38;
       }
 
       stateRef.current.camera.updateProjectionMatrix();
       stateRef.current.renderer.setSize(w, h);
     };
+
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
 
-    // 11. Animation Tick Loop
+    // 10. ANIMATION TICK LOOP
     const animate = (now: number) => {
       if (!stateRef.current) return;
       const state = stateRef.current;
       const dt = Math.min((now - state.lastTime) / 1000, 0.05);
       state.lastTime = now;
 
-      // Handle Character Rotation & Momentum Damping
+      // Apply yaw rotation to character ONLY (ground remains still!)
       if (!state.isDragging) {
         if (isAutoRotating) {
-          state.rotationAngle += dt * 0.45;
+          state.yawAngle += dt * 0.35;
         } else {
-          // Natural friction deceleration
-          state.rotationAngle += state.rotationVelocity;
-          state.rotationVelocity *= 0.92;
-          if (Math.abs(state.rotationVelocity) < 0.0001) {
-            state.rotationVelocity = 0;
-          }
+          state.yawAngle += state.yawVelocity;
+          state.yawVelocity *= 0.92;
+          if (Math.abs(state.yawVelocity) < 0.0001) state.yawVelocity = 0;
         }
       }
 
-      state.stageGroup.rotation.y = state.rotationAngle;
+      state.characterRotatorGroup.rotation.y = state.yawAngle;
 
-      // Holographic Ring counter-rotations
-      state.hologramRing1.rotation.z += dt * 0.35;
-      state.hologramRing2.rotation.z -= dt * 0.25;
+      // Camera vertical framing
+      const targetDist = 3.8;
+      const camY = 1.0 + Math.sin(state.pitchAngle) * 1.2;
+      const camZ = Math.cos(state.pitchAngle) * targetDist;
+      state.camera.position.set(0, camY, camZ);
+      state.camera.lookAt(0, 0.88, 0);
 
-      // Particle floating drift
-      const pAttr = state.particlesMesh.geometry.attributes.position as THREE.BufferAttribute;
-      const pArr = pAttr.array as Float32Array;
-      for (let i = 1; i < pArr.length; i += 3) {
-        pArr[i] += dt * 0.18;
-        if (pArr[i] > 3.2) pArr[i] = 0.05;
-      }
-      pAttr.needsUpdate = true;
-
-      // Character Natural Idle Stance Animation
+      // Character Idle Animation
       if (state.rig) {
         state.rig.updateAnimation(dt, 0, false, false);
       }
 
-      // Pet Companion Animation
-      if (state.pet) {
-        state.pet.update(dt);
+      // Companion Animation
+      if (state.teddyPet) {
+        state.teddyPet.update(dt, 0);
+      }
+      if (state.dronePet) {
+        state.dronePet.update(dt);
       }
 
       state.renderer.render(state.scene, state.camera);
       state.frameId = requestAnimationFrame(animate);
     };
 
-    if (stateRef.current) {
-      stateRef.current.frameId = requestAnimationFrame(animate);
-    }
+    stateRef.current.frameId = requestAnimationFrame(animate);
 
-    // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
@@ -390,37 +375,15 @@ export const Lobby3DCanvas: React.FC<Lobby3DCanvasProps> = ({
 
       if (stateRef.current) {
         cancelAnimationFrame(stateRef.current.frameId);
-        renderer.dispose();
-        if (dom.parentElement) {
-          dom.parentElement.removeChild(dom);
-        }
-        stateRef.current = null;
+        try {
+          stateRef.current.renderer.dispose();
+          if (dom.parentElement === container) {
+            container.removeChild(dom);
+          }
+        } catch {}
       }
     };
-  }, [isAutoRotating]);
+  }, [appearance, petType, petAccessory, isAutoRotating]);
 
-  // Update Appearance Dynamically
-  useEffect(() => {
-    if (!stateRef.current) return;
-    const current = stateRef.current;
-    if (current.rig) {
-      current.stageGroup.remove(current.rig.group);
-    }
-    current.rig = new CharacterRig(appearance);
-    current.stageGroup.add(current.rig.group);
-  }, [appearance]);
-
-  // Update Pet Dynamically
-  useEffect(() => {
-    if (!stateRef.current || !stateRef.current.pet) return;
-    stateRef.current.pet.setType(petType);
-  }, [petType]);
-
-  return (
-    <div
-      ref={mountRef}
-      className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing select-none overflow-hidden"
-      style={{ touchAction: 'none' }}
-    />
-  );
+  return <div ref={mountRef} className="absolute inset-0 z-0 w-full h-full overflow-hidden" />;
 };

@@ -22,6 +22,7 @@ interface TitleScreenProps {
   onOpenStats?: () => void;
   onOpenRankings?: () => void;
   onOpenChat?: () => void;
+  onLaunchCyberTesla?: () => void;
   appearance?: CharacterAppearance;
   playerStats?: PlayerStats;
   currentRoom?: string;
@@ -39,6 +40,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   onOpenStats = () => {},
   onOpenRankings = () => {},
   onOpenChat = () => {},
+  onLaunchCyberTesla = () => {},
   appearance = DEFAULT_PLAYER_APPEARANCE,
   playerStats = {
     money: 350,
@@ -67,6 +69,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
       onOpenChat={onOpenChat}
       onOpenInstallModal={onOpenInstallModal}
       onOpenPublishGuide={onOpenPublishGuide}
+      onLaunchCyberTesla={onLaunchCyberTesla}
     />
   );
 };

@@ -18,8 +18,10 @@ import { MultiplayerManager } from './multiplayer/multiplayerManager';
 import { VoiceChatManager } from './multiplayer/voiceChatManager';
 import { GameSettings, SavedGameState, GraphicsQuality } from './types';
 import { GameSignboardManager, GameSignboardConfig } from './world/GameSignboard';
-import { GameDoorMetadata } from '../game-house/gameRegistry';
 import { RiverEcosystem } from './world/riverEcosystem';
+import { GameDoorMetadata } from '../game-house/gameRegistry';
+import { TeddyBearCompanion, TeddyBearType, PetToyAccessory } from './character/TeddyBearCompanion';
+import { PetCompanionModel } from './lobby/PetCompanionModel';
 
 export interface GameEngineCallbacks {
   onInteractionPrompt?: (prompt: string | null) => void;
@@ -66,6 +68,8 @@ export class GameEngine {
   public voiceChatManager: VoiceChatManager;
   public gameSignboards: GameSignboardManager;
   public riverEcosystem: RiverEcosystem;
+  public companionPet: TeddyBearCompanion | null = null;
+  public companionDrone: PetCompanionModel | null = null;
   public playerLocation: 'PRIVATE_HOME' | 'SHARED_CITY' = 'SHARED_CITY';
 
   // Player Physics & Locomotion State
@@ -186,6 +190,32 @@ export class GameEngine {
     this.playerRig.group.rotation.y = this.playerRotation;
     this.playerLocation = 'SHARED_CITY';
     this.scene.add(this.playerRig.group);
+
+    // Intelligent AI Companion (Aero Drone or Teddy Bear)
+    let activePet = 'cyber_neon';
+    try {
+      const savedPet = localStorage.getItem('dream_active_pet_companion') || localStorage.getItem('dream_active_teddy');
+      if (savedPet) activePet = savedPet;
+    } catch {}
+
+    if (activePet === 'aero_drone') {
+      this.companionDrone = new PetCompanionModel('aero_drone');
+      this.companionDrone.group.position.set(5.2, 0.6, 12.8);
+      this.scene.add(this.companionDrone.group);
+    } else {
+      const validTeddy: TeddyBearType = [
+        'cyber_neon',
+        'classic_honey',
+        'panda_bear',
+        'golden_hero',
+      ].includes(activePet as TeddyBearType)
+        ? (activePet as TeddyBearType)
+        : 'cyber_neon';
+
+      this.companionPet = new TeddyBearCompanion(validTeddy, 'toy_blaster');
+      this.companionPet.group.position.set(5.2, 0.05, 12.8);
+      this.scene.add(this.companionPet.group);
+    }
 
     // NPCs & Vehicles
     const heightFunc = (x: number, z: number, y?: number) => this.terrain.getTerrainHeight(x, z, y);
@@ -602,8 +632,21 @@ export class GameEngine {
       (x, z, r, y) => this.terrain.checkObstacleCollision(x, z, r, y),
     );
 
-    // 4. Update Living NPCs
+    // 4. Update Living NPCs & AI Companions (Teddy Bear or Aero Drone)
     this.npcManager.update(delta, playerPos, heightFunc);
+    if (this.companionPet) {
+      this.companionPet.updateFollow(delta, playerPos, this.playerRotation, heightFunc);
+    }
+    if (this.companionDrone) {
+      const droneTargetX = playerPos.x - Math.sin(this.playerRotation + 0.8) * 1.4;
+      const droneTargetZ = playerPos.z - Math.cos(this.playerRotation + 0.8) * 1.4;
+      const groundY = heightFunc(this.companionDrone.group.position.x, this.companionDrone.group.position.z);
+      this.companionDrone.group.position.x = THREE.MathUtils.damp(this.companionDrone.group.position.x, droneTargetX, 7, delta);
+      this.companionDrone.group.position.z = THREE.MathUtils.damp(this.companionDrone.group.position.z, droneTargetZ, 7, delta);
+      this.companionDrone.group.position.y = THREE.MathUtils.damp(this.companionDrone.group.position.y, groundY + 0.9, 5, delta);
+      this.companionDrone.group.rotation.y = THREE.MathUtils.damp(this.companionDrone.group.rotation.y, this.playerRotation, 6, delta);
+      this.companionDrone.update(delta);
+    }
 
     // 5. Update World Terrain (waterfall, river wave offsets)
     this.terrain.update(delta);
@@ -962,6 +1005,38 @@ export class GameEngine {
 
     localStorage.setItem('dream_player_appearance', JSON.stringify(appearance));
     this.callbacks.onNotification?.('Character appearance updated!', 'AVATAR EQUIPPED');
+  }
+
+  public setCompanionPet(type: string, accessory: PetToyAccessory = 'toy_blaster') {
+    if (this.companionPet) {
+      this.scene.remove(this.companionPet.group);
+      this.companionPet = null;
+    }
+    if (this.companionDrone) {
+      this.scene.remove(this.companionDrone.group);
+      this.companionDrone = null;
+    }
+
+    if (type === 'aero_drone') {
+      this.companionDrone = new PetCompanionModel('aero_drone');
+      this.companionDrone.group.position.set(this.playerRig.group.position.x + 1.0, 0.6, this.playerRig.group.position.z + 1.0);
+      this.scene.add(this.companionDrone.group);
+    } else {
+      const validTeddy: TeddyBearType = [
+        'cyber_neon',
+        'classic_honey',
+        'panda_bear',
+        'golden_hero',
+      ].includes(type as any)
+        ? (type as TeddyBearType)
+        : 'cyber_neon';
+
+      this.companionPet = new TeddyBearCompanion(validTeddy, accessory);
+      this.companionPet.group.position.set(this.playerRig.group.position.x + 0.8, 0.05, this.playerRig.group.position.z + 0.8);
+      this.scene.add(this.companionPet.group);
+    }
+    localStorage.setItem('dream_active_pet_companion', type);
+    localStorage.setItem('dream_active_teddy', type);
   }
 
   public dispose() {

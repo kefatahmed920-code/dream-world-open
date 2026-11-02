@@ -724,6 +724,50 @@ class SoundManager {
     }
     this.villageMusicSpatialGain.gain.setTargetAtTime(atten, this.ctx.currentTime, 0.1);
   }
+
+  // --- TEDDY BEAR PET COMPANION SOUNDS ---
+  private petVolume = 0.6;
+  public setPetVolume(vol: number) {
+    this.petVolume = Math.max(0, Math.min(1, vol));
+  }
+
+  public playPetChirp() {
+    this.resume();
+    if (!this.ctx || !this.sfxGain || this.isMuted || this.petVolume <= 0) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(660, now);
+    osc.frequency.exponentialRampToValueAtTime(1100, now + 0.12);
+
+    gain.gain.setValueAtTime(0.08 * this.petVolume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.15);
+  }
+
+  public playPetFootstep() {
+    this.resume();
+    if (!this.ctx || !this.sfxGain || this.isMuted || this.petVolume <= 0) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(260, now);
+    osc.frequency.exponentialRampToValueAtTime(80, now + 0.05);
+
+    gain.gain.setValueAtTime(0.04 * this.petVolume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.07);
+  }
 }
 
 export const soundManager = new SoundManager();

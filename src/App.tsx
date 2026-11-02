@@ -456,6 +456,7 @@ export default function App() {
           onOpenStats={() => setIsStatsOpen(true)}
           onOpenRankings={() => setIsRankingsOpen(true)}
           onOpenChat={() => setIsChatOpen(true)}
+          onLaunchCyberTesla={() => setIsCyberTeslaOpen(true)}
           appearance={playerAppearance}
           playerStats={playerStats}
           currentRoom={engineRef.current?.multiplayerManager.currentRoom || 'Dhaka-Hub-1'}
