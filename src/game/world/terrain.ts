@@ -443,9 +443,11 @@ export class WorldTerrain {
       }
     }
 
-    // 5. Wide River Channel (outside the bridge deck)
-    const riverDist = Math.abs(x - 87.5);
-    if (riverDist < 25) {
+    // 5. Wide River Channel (outside the bridge deck, river center at 92.5, width ~89m)
+    const riverCenter = 92.5;
+    const riverHalfW = 44.5;
+    const riverDist = Math.abs(x - riverCenter);
+    if (riverDist < riverHalfW) {
       const bedY = this.getGroundElevation(x, z);
       if (currentY !== undefined && currentY >= -0.7) {
         return -0.45;
@@ -487,10 +489,14 @@ export class WorldTerrain {
    * Pure terrain, riverbed, pond, hills, and plains.
    */
   public getGroundElevation(x: number, z: number): number {
-    // 1. Wide River Channel (X between 62.5 and 112.5)
-    const riverDist = Math.abs(x - 87.5);
-    if (riverDist < 25) {
-      return -3.2 * (1 - riverDist / 25);
+    // 1. Grand Wide River Channel (Padma River spanning X from 48 to 137, center at 92.5)
+    const riverCenter = 92.5;
+    const riverHalfW = 44.5;
+    const riverDist = Math.abs(x - riverCenter);
+    if (riverDist < riverHalfW) {
+      const norm = riverDist / riverHalfW;
+      // Deep natural curved riverbed down to -3.8m depth
+      return -3.8 * Math.cos(norm * Math.PI * 0.5);
     }
 
     // 2. Village Natural Pond Basin (Center: [188, -22])
@@ -520,14 +526,28 @@ export class WorldTerrain {
 
   /**
    * Check if coordinate is inside water body (Padma River or Village Pond)
-   * Excludes upper bridge deck and wooden fishing pier so entities walking on them are not in water.
+   * Excludes upper bridge deck, wooden fishing pier, and river ghat steps
    */
   public isWater(x: number, z: number, y?: number): boolean {
-    // 1. Padma River
-    const riverDist = Math.abs(x - 87.5);
-    if (riverDist < 25) {
-      if (x >= 50 && x <= 125 && z >= -6.5 && z <= 12.5) {
-        if (y !== undefined && y >= 2.0) {
+    // 1. Grand Wide Padma River
+    const riverCenter = 92.5;
+    const riverDist = Math.abs(x - riverCenter);
+    if (riverDist < 43.5) {
+      // Exclude bridge deck
+      if (x >= 46 && x <= 139 && z >= -7.0 && z <= 13.0) {
+        if (y !== undefined && y >= 1.8) {
+          return false;
+        }
+      }
+      // Exclude wooden fishing pier
+      if (x >= 50 && x <= 57.5 && z >= 11.5 && z <= 16.5) {
+        if (y !== undefined && y >= 0.35) {
+          return false;
+        }
+      }
+      // Exclude West River Ghat steps (Y >= -0.15)
+      if (x >= 47 && x <= 53 && z >= 22 && z <= 36) {
+        if (y !== undefined && y >= -0.15) {
           return false;
         }
       }
@@ -577,16 +597,16 @@ export class WorldTerrain {
       // Vertex color blending based on region & altitude
       let r = 0.22, g = 0.42, b = 0.18; // Default lush green
 
-      if (x < 62.5) {
-        // City paved zone
+      if (x < 48) {
+        // City paved zone (expanded across all West territory)
         r = 0.28; g = 0.3; b = 0.32;
-      } else if (Math.abs(x - 87.5) < 26) {
-        // Riverbed silt / sand under the water
+      } else if (Math.abs(x - 92.5) < 46) {
+        // Wide riverbed silt / sand under the water
         r = 0.38; g = 0.34; b = 0.24;
       } else if (y > 12) {
         // Mountain rocky slopes
         r = 0.42; g = 0.44; b = 0.38;
-      } else if (x > 112.5 && z > 30) {
+      } else if (x > 137 && z > 30) {
         // Golden green paddy fields
         r = 0.35; g = 0.55; b = 0.15;
       }
@@ -616,9 +636,9 @@ export class WorldTerrain {
    * Riverbed is carved out beneath, making water visible flowing from north to south.
    */
   private buildRiverAndBridge() {
-    // 1. Animated River Water with Procedural Waves & Ripples
+    // 1. Animated River Water with Procedural Waves & Ripples (Widened to 90m)
     this.riverWaterTex = createRiverWaterTexture();
-    const riverGeo = new THREE.PlaneGeometry(65, 650, 4, 80);
+    const riverGeo = new THREE.PlaneGeometry(90, 750, 6, 90);
     riverGeo.rotateX(-Math.PI / 2);
     const riverMat = new THREE.MeshStandardMaterial({
       map: this.riverWaterTex,
@@ -629,12 +649,12 @@ export class WorldTerrain {
       opacity: 0.88,
     });
     this.riverMesh = new THREE.Mesh(riverGeo, riverMat);
-    this.riverMesh.position.set(87.5, -0.4, 0);
+    this.riverMesh.position.set(92.5, -0.4, 0);
     this.group.add(this.riverMesh);
 
-    // Natural gently sloped riverbank shores and foam edge transitions (X: 62.5 and X: 112.5)
+    // Natural gently sloped riverbank shores (X ≈ 48.5 and X ≈ 136.5)
     // West sandy shoreline transition (connecting city to river)
-    const westShoreGeo = new THREE.PlaneGeometry(6, 650, 1, 40);
+    const westShoreGeo = new THREE.PlaneGeometry(8, 750, 2, 40);
     westShoreGeo.rotateX(-Math.PI / 2);
     const shoreSandMat = new THREE.MeshStandardMaterial({
       color: 0xb59b73, // Natural sandy silt riverbank
@@ -642,17 +662,17 @@ export class WorldTerrain {
       metalness: 0.05,
     });
     const westShore = new THREE.Mesh(westShoreGeo, shoreSandMat);
-    westShore.position.set(62.5, -0.15, 0);
-    westShore.rotation.z = -0.06; // gentle slope toward water
+    westShore.position.set(48.5, -0.15, 0);
+    westShore.rotation.z = -0.08; // gentle natural slope toward water
     westShore.receiveShadow = true;
     this.group.add(westShore);
 
     // East village shoreline transition
-    const eastShoreGeo = new THREE.PlaneGeometry(6, 650, 1, 40);
+    const eastShoreGeo = new THREE.PlaneGeometry(8, 750, 2, 40);
     eastShoreGeo.rotateX(-Math.PI / 2);
     const eastShore = new THREE.Mesh(eastShoreGeo, shoreSandMat);
-    eastShore.position.set(112.5, -0.15, 0);
-    eastShore.rotation.z = 0.06;
+    eastShore.position.set(136.5, -0.15, 0);
+    eastShore.rotation.z = 0.08;
     eastShore.receiveShadow = true;
     this.group.add(eastShore);
 
@@ -662,16 +682,16 @@ export class WorldTerrain {
       transparent: true,
       opacity: 0.45,
     });
-    const westFoamGeo = new THREE.PlaneGeometry(1.4, 650);
+    const westFoamGeo = new THREE.PlaneGeometry(1.6, 750);
     westFoamGeo.rotateX(-Math.PI / 2);
     const westFoam = new THREE.Mesh(westFoamGeo, foamMat);
-    westFoam.position.set(63.2, -0.36, 0);
+    westFoam.position.set(49.2, -0.36, 0);
     this.group.add(westFoam);
 
-    const eastFoamGeo = new THREE.PlaneGeometry(1.4, 650);
+    const eastFoamGeo = new THREE.PlaneGeometry(1.6, 750);
     eastFoamGeo.rotateX(-Math.PI / 2);
     const eastFoam = new THREE.Mesh(eastFoamGeo, foamMat);
-    eastFoam.position.set(111.8, -0.36, 0);
+    eastFoam.position.set(135.8, -0.36, 0);
     this.group.add(eastFoam);
 
     // 2. Authentic Chinese Kaifeng Rainbow Moon Arch Bridge & River System
@@ -697,12 +717,12 @@ export class WorldTerrain {
       metalness: 0.1,
     });
 
-    // 1. Main East-West Avenue (Widened to 18m: Z from -6 to +12, X from -140 to Bridge West Ramp at X = 50)
-    // Provides 2 spacious directional roadways (Eastbound and Westbound)
-    const mainAvenueGeo = new THREE.PlaneGeometry(190, 18);
+    // 1. Grand East-West Main Avenue (Widened to 18m, extended to 326m from X = -280 to Bridge West Ramp at X = 46)
+    // Center at X = -117, Z = 3. Provides 2 spacious directional roadways (Eastbound & Westbound)
+    const mainAvenueGeo = new THREE.PlaneGeometry(326, 18);
     mainAvenueGeo.rotateX(-Math.PI / 2);
     const mainAvenue = new THREE.Mesh(mainAvenueGeo, roadMat);
-    mainAvenue.position.set(-45, 0.03, 3);
+    mainAvenue.position.set(-117, 0.03, 3);
     mainAvenue.receiveShadow = true;
     this.group.add(mainAvenue);
 
@@ -720,11 +740,13 @@ export class WorldTerrain {
     });
 
     const dividerSegments = [
-      { startX: -135, endX: -72.0 },  // Far west stretch
-      { startX: -68.0, endX: -18.0 }, // West stretch to Cross Blvd
-      { startX: -2.0, endX: 6.5 },    // Between Cross Blvd & Overbridge/Crosswalk
-      { startX: 9.5, endX: 23.5 },    // Between Crosswalk & East River Road
-      { startX: 36.5, endX: 50.0 },   // East stretch to Chinese Bridge Approach
+      { startX: -275, endX: -207.0 },  // Far west stretch to Metro Tech Blvd
+      { startX: -193.0, endX: -117.0 }, // West stretch between Metro Tech & West Commercial Blvd
+      { startX: -103.0, endX: -72.0 },  // Stretch between West Blvd & Central Hub
+      { startX: -68.0, endX: -18.0 },  // West stretch to Cross Blvd
+      { startX: -2.0, endX: 6.5 },     // Between Cross Blvd & Overbridge/Crosswalk
+      { startX: 9.5, endX: 23.5 },     // Between Crosswalk & East River Road
+      { startX: 36.5, endX: 46.0 },    // East stretch to Chinese Bridge Approach
     ];
 
     dividerSegments.forEach((seg) => {
@@ -771,23 +793,24 @@ export class WorldTerrain {
       }
     });
 
-    // Intersection Yellow Box Junction Markings at Cross Boulevard (X = -10, Z = 3)
-    const junctionBoxGeo = new THREE.PlaneGeometry(14, 18);
-    junctionBoxGeo.rotateX(-Math.PI / 2);
-    const junctionMat = new THREE.MeshStandardMaterial({
-      color: 0x1a1e24,
-      roughness: 0.6,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
+    // Intersection Yellow Box Junction Markings at Crossings
+    [-200, -110, -10].forEach((bx) => {
+      const junctionBoxGeo = new THREE.PlaneGeometry(14, 18);
+      junctionBoxGeo.rotateX(-Math.PI / 2);
+      const junctionMat = new THREE.MeshStandardMaterial({
+        color: 0x1a1e24,
+        roughness: 0.6,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      });
+      const junctionBox = new THREE.Mesh(junctionBoxGeo, junctionMat);
+      junctionBox.position.set(bx, 0.032, 3);
+      junctionBox.receiveShadow = true;
+      this.group.add(junctionBox);
     });
-    const junctionBox = new THREE.Mesh(junctionBoxGeo, junctionMat);
-    junctionBox.position.set(-10, 0.032, 3);
-    junctionBox.receiveShadow = true;
-    this.group.add(junctionBox);
 
     // 1C. Matching Brick-Pattern Sidewalks with Curbs on BOTH SIDES of Main Avenue
-    // Continuous sidewalks along North (Z: -11.5 to -6) and South (Z: 12 to 17.5) sides
     const brickTex = createBrickSidewalkTexture();
     const sidewalkMat = new THREE.MeshStandardMaterial({
       map: brickTex,
@@ -803,9 +826,11 @@ export class WorldTerrain {
     });
 
     const sidewalkSegments = [
-      { startX: -140, endX: -17.5 }, // West of Cross Blvd
-      { startX: -2.5, endX: 23.5 },  // Between Cross Blvd & East River Rd
-      { startX: 36.5, endX: 50.0 },  // East of East River Rd to Bridge Approach
+      { startX: -280, endX: -207.0 },
+      { startX: -193.0, endX: -117.0 },
+      { startX: -103.0, endX: -17.5 },
+      { startX: -2.5, endX: 23.5 },
+      { startX: 36.5, endX: 46.0 },
     ];
 
     sidewalkSegments.forEach((seg) => {
@@ -843,76 +868,147 @@ export class WorldTerrain {
       this.group.add(northCurb);
     });
 
-    // Rounded Curb Corner Returns turning into Cross Streets at Intersections
-    const cornerPositions = [
-      { x: -17.5, z: 12.15, rotY: Math.PI / 2 },
-      { x: -17.5, z: -6.15, rotY: -Math.PI / 2 },
-      { x: -2.5, z: 12.15, rotY: Math.PI / 2 },
-      { x: -2.5, z: -6.15, rotY: -Math.PI / 2 },
-      { x: 23.5, z: 12.15, rotY: Math.PI / 2 },
-      { x: 23.5, z: -6.15, rotY: -Math.PI / 2 },
-      { x: 36.5, z: 12.15, rotY: Math.PI / 2 },
-      { x: 36.5, z: -6.15, rotY: -Math.PI / 2 },
+    // 2. North-South Grand Cross Boulevards across the big city
+    const buildCrossBoulevard = (centerX: number, northLen: number, southLen: number) => {
+      // North Segment
+      const nGeo = new THREE.PlaneGeometry(14, northLen);
+      nGeo.rotateX(-Math.PI / 2);
+      const nRoad = new THREE.Mesh(nGeo, roadMat);
+      nRoad.position.set(centerX, 0.03, -6.0 - northLen / 2);
+      nRoad.receiveShadow = true;
+      this.group.add(nRoad);
+
+      // South Segment
+      const sGeo = new THREE.PlaneGeometry(14, southLen);
+      sGeo.rotateX(-Math.PI / 2);
+      const sRoad = new THREE.Mesh(sGeo, roadMat);
+      sRoad.position.set(centerX, 0.03, 12.0 + southLen / 2);
+      sRoad.receiveShadow = true;
+      this.group.add(sRoad);
+
+      // Sidewalks on West and East flanks
+      [-1, 1].forEach((dir) => {
+        const swX = centerX + dir * 9.25;
+        // North walk
+        const nwGeo = new THREE.BoxGeometry(4.5, 0.16, northLen - 2.75);
+        const nw = new THREE.Mesh(nwGeo, sidewalkMat);
+        nw.position.set(swX, 0.08, -8.75 - (northLen - 2.75) / 2);
+        nw.receiveShadow = true;
+        this.group.add(nw);
+
+        // South walk
+        const swGeo = new THREE.BoxGeometry(4.5, 0.16, southLen - 2.75);
+        const sw = new THREE.Mesh(swGeo, sidewalkMat);
+        sw.position.set(swX, 0.08, 14.75 + (southLen - 2.75) / 2);
+        sw.receiveShadow = true;
+        this.group.add(sw);
+      });
+    };
+
+    // Boulevard 1: Central Cross Boulevard (at X = -10)
+    buildCrossBoulevard(-10, 124, 38);
+    // Boulevard 2: West Commercial Boulevard (at X = -110)
+    buildCrossBoulevard(-110, 90, 58);
+    // Boulevard 3: Metro Tech Boulevard (at X = -200)
+    buildCrossBoulevard(-200, 90, 58);
+
+    // 3. Secondary Grid Avenues across the expanded city
+    // North Avenue (at Z = -50, width 11m, extended all the way across from X = -275 to 35)
+    const northAveSegments = [
+      { startX: -275, endX: -207 },
+      { startX: -193, endX: -117 },
+      { startX: -103, endX: -17.5 },
+      { startX: -2.5, endX: 35 },
     ];
-    cornerPositions.forEach((cp) => {
-      const cornerGeo = new THREE.BoxGeometry(0.35, 0.22, 2.0);
-      const corner = new THREE.Mesh(cornerGeo, curbMat);
-      corner.position.set(cp.x, 0.11, cp.z + (cp.z > 0 ? 1.0 : -1.0));
-      corner.receiveShadow = true;
-      this.group.add(corner);
+    northAveSegments.forEach((nas) => {
+      const len = nas.endX - nas.startX;
+      const mid = (nas.startX + nas.endX) / 2;
+      const rGeo = new THREE.PlaneGeometry(len, 11);
+      rGeo.rotateX(-Math.PI / 2);
+      const rMesh = new THREE.Mesh(rGeo, roadMat);
+      rMesh.position.set(mid, 0.03, -50);
+      rMesh.receiveShadow = true;
+      this.group.add(rMesh);
     });
 
-    // 2. North-South Cross Boulevard (at X = -10, width 14m: X from -17 to -3)
-    // Non-overlapping segments that cleanly meet the widened 18m Main Avenue without z-fighting!
-    // North Segment: Z from -130 to -6.0 (length 124m)
-    const crossBlvdNorthGeo = new THREE.PlaneGeometry(14, 124);
-    crossBlvdNorthGeo.rotateX(-Math.PI / 2);
-    const crossBlvdNorth = new THREE.Mesh(crossBlvdNorthGeo, roadMat);
-    crossBlvdNorth.position.set(-10, 0.03, -68);
-    crossBlvdNorth.receiveShadow = true;
-    this.group.add(crossBlvdNorth);
-
-    // South Segment: Z from 12.0 to 50.0 (length 38m)
-    const crossBlvdSouthGeo = new THREE.PlaneGeometry(14, 38);
-    crossBlvdSouthGeo.rotateX(-Math.PI / 2);
-    const crossBlvdSouth = new THREE.Mesh(crossBlvdSouthGeo, roadMat);
-    crossBlvdSouth.position.set(-10, 0.03, 31);
-    crossBlvdSouth.receiveShadow = true;
-    this.group.add(crossBlvdSouth);
-
-    // Matching Brick Sidewalks along Cross Boulevard (West side at X = -19.25, East side at X = -0.75)
-    // North section (Z: -130 to -8.75)
-    [-19.25, -0.75].forEach((swX) => {
-      const walkGeo = new THREE.BoxGeometry(4.5, 0.16, 121.25);
-      const walk = new THREE.Mesh(walkGeo, sidewalkMat);
-      walk.position.set(swX, 0.08, -69.375);
-      walk.receiveShadow = true;
-      this.group.add(walk);
+    // South Avenue (at Z = 35, width 11m, extended across from X = -275 to 35)
+    const southAveSegments = [
+      { startX: -275, endX: -207 },
+      { startX: -193, endX: -117 },
+      { startX: -103, endX: -17.5 },
+      { startX: -2.5, endX: 35 },
+    ];
+    southAveSegments.forEach((sas) => {
+      const len = sas.endX - sas.startX;
+      const mid = (sas.startX + sas.endX) / 2;
+      const rGeo = new THREE.PlaneGeometry(len, 11);
+      rGeo.rotateX(-Math.PI / 2);
+      const rMesh = new THREE.Mesh(rGeo, roadMat);
+      rMesh.position.set(mid, 0.03, 35);
+      rMesh.receiveShadow = true;
+      this.group.add(rMesh);
     });
-    // South section (Z: 14.75 to 50)
-    [-19.25, -0.75].forEach((swX) => {
-      const walkGeo = new THREE.BoxGeometry(4.5, 0.16, 35.25);
-      const walk = new THREE.Mesh(walkGeo, sidewalkMat);
-      walk.position.set(swX, 0.08, 32.375);
-      walk.receiveShadow = true;
-      this.group.add(walk);
-    });
-    // 3. (Elevated flyover expressway removed per user instructions; avenue is wide open and clear)
 
-    // 4. Pedestrian Foot-Overbridge across Main Avenue with Staircases at Both Ends
+    // North District Boulevard (at Z = -85, width 12m, connecting the northern tech hubs)
+    const northDistGeo = new THREE.PlaneGeometry(210, 12);
+    northDistGeo.rotateX(-Math.PI / 2);
+    const northDistRoad = new THREE.Mesh(northDistGeo, roadMat);
+    northDistRoad.position.set(-155, 0.03, -85);
+    northDistRoad.receiveShadow = true;
+    this.group.add(northDistRoad);
+
+    // South Waterfront Boulevard (at Z = 65, width 12m, connecting the southern commercial parks)
+    const southDistGeo = new THREE.PlaneGeometry(210, 12);
+    southDistGeo.rotateX(-Math.PI / 2);
+    const southDistRoad = new THREE.Mesh(southDistGeo, roadMat);
+    southDistRoad.position.set(-155, 0.03, 65);
+    southDistRoad.receiveShadow = true;
+    this.group.add(southDistRoad);
+
+    // East River Road (at X = 30, width 12m) - segmented at Main Avenue
+    const eastRiverNorthGeo = new THREE.PlaneGeometry(12, 57);
+    eastRiverNorthGeo.rotateX(-Math.PI / 2);
+    const eastRiverNorth = new THREE.Mesh(eastRiverNorthGeo, roadMat);
+    eastRiverNorth.position.set(30, 0.03, -34.5);
+    eastRiverNorth.receiveShadow = true;
+    this.group.add(eastRiverNorth);
+
+    const eastRiverSouthGeo = new THREE.PlaneGeometry(12, 35);
+    eastRiverSouthGeo.rotateX(-Math.PI / 2);
+    const eastRiverSouth = new THREE.Mesh(eastRiverSouthGeo, roadMat);
+    eastRiverSouth.position.set(30, 0.03, 29.5);
+    eastRiverSouth.receiveShadow = true;
+    this.group.add(eastRiverSouth);
+
+    // Matching Sidewalks along East River Road
+    [-1, 1].forEach((dir) => {
+      const swX = 30 + dir * 8.25;
+      const nWalkGeo = new THREE.BoxGeometry(4.5, 0.16, 54.25);
+      const nWalk = new THREE.Mesh(nWalkGeo, sidewalkMat);
+      nWalk.position.set(swX, 0.08, -35.875);
+      nWalk.receiveShadow = true;
+      this.group.add(nWalk);
+
+      const sWalkGeo = new THREE.BoxGeometry(4.5, 0.16, 32.25);
+      const sWalk = new THREE.Mesh(sWalkGeo, sidewalkMat);
+      sWalk.position.set(swX, 0.08, 30.875);
+      sWalk.receiveShadow = true;
+      this.group.add(sWalk);
+    });
+
+    // 4. Pedestrian Foot-Overbridge across Main Avenue
     this.buildPedestrianOverbridge();
 
-    // 5. Commercial & Apartment Buildings with Bengali Shopfronts
-    // All obstructing buildings relocated sideways to dedicated vacant parcels beside roads.
-    // Orientations configured so front facades face directly toward their respective street.
+    // 5. Commercial & Apartment High-Rises & Skyscrapers with Authentic Bengali Shopfronts
+    // Vastly expanded across the new Western City Districts
     const buildingsData = [
-      // South Shopping Row (Facing North toward Main East-West Avenue at Z = 3)
+      // Central South Shopping Row (Facing North toward Main Avenue at Z = 3)
       {
         x: 11,
         z: 25,
         w: 14,
         d: 11,
-        h: 22,
+        h: 24,
         color: 0xd97706,
         shopTitle: 'ঢাকা চা স্টল ও স্নাক্স',
         sub: 'DHAKA TEA STALL & FOODS',
@@ -922,7 +1018,6 @@ export class WorldTerrain {
         awningC2: '#fef08a',
       },
       {
-        // Relocated away from Cross Boulevard (was X = -14, now X = -27)
         x: -27,
         z: 25,
         w: 13,
@@ -937,12 +1032,11 @@ export class WorldTerrain {
         awningC2: '#ffffff',
       },
       {
-        // Relocated away from Flyover corridor (was X = -42, now X = -65)
         x: -65,
         z: 26,
         w: 18,
         d: 13,
-        h: 34,
+        h: 36,
         color: 0x475569,
         shopTitle: 'সোনার বাংলা সুপারমার্কেট',
         sub: 'SHONAR BANGLA BAZAAR',
@@ -956,17 +1050,75 @@ export class WorldTerrain {
         z: 26,
         w: 20,
         d: 13,
-        h: 36,
+        h: 38,
         color: 0x1e293b,
         shopTitle: 'রূপসী বাংলা ফ্যাশন হাউস',
-        sub: 'RUPOSHI BANGLA FASHION & BOUTIQUE',
+        sub: 'RUPOSHI BANGLA FASHION',
         theme: '#9333ea',
         accent: '#f3e8ff',
         awningC1: '#9333ea',
         awningC2: '#fef08a',
       },
 
-      // North Commercial Row (Facing South toward Main East-West Avenue at Z = 3)
+      // Western District South Avenue Buildings (Expanded City Row)
+      {
+        x: -135,
+        z: 25,
+        w: 16,
+        d: 12,
+        h: 32,
+        color: 0xb45309,
+        shopTitle: 'হাজী কাচ্চি বিরিয়ানি ও কাবাব',
+        sub: 'HAJI FAMOUS KACCHI BIRYANI',
+        theme: '#c2410c',
+        accent: '#fef08a',
+        awningC1: '#b91c1c',
+        awningC2: '#fef08a',
+      },
+      {
+        x: -160,
+        z: 26,
+        w: 22,
+        d: 14,
+        h: 52,
+        color: 0x0f172a,
+        shopTitle: 'বসুন্ধরা সিটি শপিং কমপ্লেক্স',
+        sub: 'BASHUNDHARA CITY MEGA MALL',
+        theme: '#1d4ed8',
+        accent: '#93c5fd',
+        awningC1: '#1d4ed8',
+        awningC2: '#ffffff',
+      },
+      {
+        x: -225,
+        z: 26,
+        w: 20,
+        d: 13,
+        h: 44,
+        color: 0x1e293b,
+        shopTitle: 'স্কয়ার ফার্মাসিউটিক্যালস প্লাজা',
+        sub: 'SQUARE PHARMA HEALTHCARE PLAZA',
+        theme: '#0f766e',
+        accent: '#5eead4',
+        awningC1: '#0f766e',
+        awningC2: '#ffffff',
+      },
+      {
+        x: -255,
+        z: 26,
+        w: 18,
+        d: 13,
+        h: 38,
+        color: 0x334155,
+        shopTitle: 'মেঘনা পেট্রোলিয়াম টাওয়ার',
+        sub: 'MEGHNA PETROLEUM TOWER',
+        theme: '#0369a1',
+        accent: '#7dd3fc',
+        awningC1: '#0284c7',
+        awningC2: '#ffffff',
+      },
+
+      // Central North Commercial Row (Facing South toward Main Avenue at Z = 3)
       {
         x: 11,
         z: -21,
@@ -982,7 +1134,6 @@ export class WorldTerrain {
         awningC2: '#ffffff',
       },
       {
-        // Relocated away from Cross Boulevard (was X = -14, now X = -27)
         x: -27,
         z: -21,
         w: 13,
@@ -1015,7 +1166,7 @@ export class WorldTerrain {
         z: -21,
         w: 20,
         d: 13,
-        h: 40,
+        h: 42,
         color: 0x0f766e,
         shopTitle: 'মেঘনা সুপারস্টোর',
         sub: 'MEGHNA SUPERSTORE & BAZAAR',
@@ -1025,22 +1176,65 @@ export class WorldTerrain {
         awningC2: '#ffffff',
       },
 
-      // North Commercial Plaza (Facing South toward North Avenue at Z = -50)
+      // Western District North Commercial Row (Expanded City High-Rises)
       {
-        // Relocated away from Flyover (was X = -42, now X = -65)
-        x: -65,
-        z: -72,
-        w: 20,
-        d: 15,
-        h: 44,
-        color: 0x0f172a,
-        shopTitle: 'গুলশান গ্র্যান্ড হোটেল ও রেস্তোরাঁ',
-        sub: 'GULSHAN GRAND HOTEL & LUXURY SUITES',
-        theme: '#b45309',
-        accent: '#fde047',
-        awningC1: '#b45309',
-        awningC2: '#fde047',
+        x: -135,
+        z: -21,
+        w: 16,
+        d: 12,
+        h: 46,
+        color: 0x1e1e24,
+        shopTitle: 'রূপালী ব্যাংক কর্পোরেট টাওয়ার',
+        sub: 'RUPALI BANK COMMERCIAL HEADQUARTERS',
+        theme: '#0369a1',
+        accent: '#38bdf8',
+        awningC1: '#0284c7',
+        awningC2: '#ffffff',
       },
+      {
+        x: -160,
+        z: -21,
+        w: 22,
+        d: 14,
+        h: 62,
+        color: 0x090d16,
+        shopTitle: 'গ্রামীণফোন ইনোভেশন টাওয়ার',
+        sub: 'GRAMEENPHONE INNOVATION & TECH HQ',
+        theme: '#0284c7',
+        accent: '#bae6fd',
+        awningC1: '#0369a1',
+        awningC2: '#bae6fd',
+      },
+      {
+        x: -225,
+        z: -21,
+        w: 22,
+        d: 14,
+        h: 56,
+        color: 0x0f172a,
+        shopTitle: 'ইউনিক আইটি ও সফটওয়্যার পার্ক',
+        sub: 'UNIQUE IT & SOFTWARE PARK',
+        theme: '#7c3aed',
+        accent: '#ddd6fe',
+        awningC1: '#6d28d9',
+        awningC2: '#ffffff',
+      },
+      {
+        x: -255,
+        z: -21,
+        w: 20,
+        d: 13,
+        h: 48,
+        color: 0x1e293b,
+        shopTitle: 'যমুনা ফিউচার ট্রেড কমপ্লেক্স',
+        sub: 'JAMUNA COMMERCIAL TRADE COMPLEX',
+        theme: '#b45309',
+        accent: '#fef08a',
+        awningC1: '#d97706',
+        awningC2: '#ffffff',
+      },
+
+      // North Plaza & Boulevard Commercial Towers (Facing South toward North Ave at Z = -50 / -85)
       {
         x: 11,
         z: -72,
@@ -1055,8 +1249,92 @@ export class WorldTerrain {
         awningC1: '#065f46',
         awningC2: '#ffffff',
       },
+      {
+        x: -65,
+        z: -72,
+        w: 20,
+        d: 15,
+        h: 44,
+        color: 0x0f172a,
+        shopTitle: 'গুলশান গ্র্যান্ড হোটেল ও রেস্তোরাঁ',
+        sub: 'GULSHAN GRAND HOTEL & LUXURY SUITES',
+        theme: '#b45309',
+        accent: '#fde047',
+        awningC1: '#b45309',
+        awningC2: '#fde047',
+      },
+      {
+        x: -135,
+        z: -72,
+        w: 16,
+        d: 13,
+        h: 34,
+        color: 0xd97706,
+        shopTitle: 'বিউটি লাচ্ছি ও ফালুদা ঘর',
+        sub: 'BEAUTY FAMOUS LACCHI & SWEETS',
+        theme: '#c2410c',
+        accent: '#fef08a',
+        awningC1: '#ea580c',
+        awningC2: '#fef08a',
+      },
+      {
+        x: -160,
+        z: -72,
+        w: 20,
+        d: 14,
+        h: 40,
+        color: 0x1e293b,
+        shopTitle: 'স্টার সিনেপ্লেক্স ও এন্টারটেইনমেন্ট',
+        sub: 'STAR CINEPLEX 4D DIGITAL CINEMA',
+        theme: '#be123c',
+        accent: '#fecdd3',
+        awningC1: '#e11d48',
+        awningC2: '#ffffff',
+      },
+      {
+        x: -225,
+        z: -72,
+        w: 18,
+        d: 13,
+        h: 32,
+        color: 0x047857,
+        shopTitle: 'প্রাণ ফুড কোর্ট ও রেস্তোরাঁ',
+        sub: 'PRAN FOODS & BAKERY CAFE',
+        theme: '#15803d',
+        accent: '#86efac',
+        awningC1: '#16a34a',
+        awningC2: '#fef08a',
+      },
+      {
+        x: -255,
+        z: -72,
+        w: 20,
+        d: 14,
+        h: 38,
+        color: 0x334155,
+        shopTitle: 'সোনারগাঁ রয়েল সুইটস',
+        sub: 'SONARGAON LUXURY RESIDENCE',
+        theme: '#4338ca',
+        accent: '#c7d2fe',
+        awningC1: '#4f46e5',
+        awningC2: '#ffffff',
+      },
 
-      // South Waterfront Avenue (Facing North toward South Avenue at Z = 35)
+      // South Boulevard & Waterfront Commercial Towers (Facing North toward South Ave at Z = 35 / 65)
+      {
+        x: 11,
+        z: 62,
+        w: 15,
+        d: 13,
+        h: 30,
+        color: 0xd97706,
+        shopTitle: 'সুরমা মিষ্টি ভাণ্ডার',
+        sub: 'SURMA TRADITIONAL SWEETS & BAKERY',
+        theme: '#c2410c',
+        accent: '#fef08a',
+        awningC1: '#ea580c',
+        awningC2: '#fef08a',
+      },
       {
         x: -65,
         z: 62,
@@ -1072,17 +1350,59 @@ export class WorldTerrain {
         awningC2: '#ffffff',
       },
       {
-        x: 11,
-        z: 62,
-        w: 15,
+        x: -135,
+        z: 60,
+        w: 16,
         d: 13,
-        h: 30,
-        color: 0xd97706,
-        shopTitle: 'সুরমা মিষ্টি ভাণ্ডার',
-        sub: 'SURMA TRADITIONAL SWEETS & BAKERY',
-        theme: '#c2410c',
+        h: 38,
+        color: 0x0f172a,
+        shopTitle: 'ডেল্টা লাইফ ইনস্যুরেন্স ভবন',
+        sub: 'DELTA LIFE ASSURANCE TOWER',
+        theme: '#0369a1',
+        accent: '#bae6fd',
+        awningC1: '#0284c7',
+        awningC2: '#ffffff',
+      },
+      {
+        x: -160,
+        z: 60,
+        w: 22,
+        d: 14,
+        h: 36,
+        color: 0x475569,
+        shopTitle: 'মেট্রো সেন্ট্রাল বিশ্ববিদ্যালয়',
+        sub: 'METRO CENTRAL UNIVERSITY CAMPUS',
+        theme: '#047857',
+        accent: '#6ee7b7',
+        awningC1: '#059669',
+        awningC2: '#ffffff',
+      },
+      {
+        x: -225,
+        z: 60,
+        w: 18,
+        d: 13,
+        h: 32,
+        color: 0x1e293b,
+        shopTitle: 'ঢাকা মেট্রো সাইবার জোন',
+        sub: 'METRO GAMING & TECH HUB',
+        theme: '#9333ea',
+        accent: '#e9d5ff',
+        awningC1: '#a855f7',
+        awningC2: '#ffffff',
+      },
+      {
+        x: -255,
+        z: 60,
+        w: 18,
+        d: 13,
+        h: 28,
+        color: 0x78350f,
+        shopTitle: 'মায়ের দোয়া ডিপার্টমেন্টাল স্টোর',
+        sub: 'MAA-ER DOA GENERAL BAZAAR',
+        theme: '#b45309',
         accent: '#fef08a',
-        awningC1: '#ea580c',
+        awningC1: '#d97706',
         awningC2: '#fef08a',
       },
     ];
@@ -1104,88 +1424,28 @@ export class WorldTerrain {
       );
     }
 
-    // 6. Intersecting Secondary Grid Roads (North Ave, South Ave, East River Road)
-    // North Avenue (at Z = -50, width 11m) - segmented at Cross Blvd (X: -17.5 to -2.5)
-    const northAveWestGeo = new THREE.PlaneGeometry(108, 11);
-    northAveWestGeo.rotateX(-Math.PI / 2);
-    const northAveWest = new THREE.Mesh(northAveWestGeo, roadMat);
-    northAveWest.position.set(-71.5, 0.03, -50);
-    northAveWest.receiveShadow = true;
-    this.group.add(northAveWest);
-
-    const northAveEastGeo = new THREE.PlaneGeometry(38, 11);
-    northAveEastGeo.rotateX(-Math.PI / 2);
-    const northAveEast = new THREE.Mesh(northAveEastGeo, roadMat);
-    northAveEast.position.set(16.5, 0.03, -50);
-    northAveEast.receiveShadow = true;
-    this.group.add(northAveEast);
-
-    // South Avenue (at Z = 35, width 11m) - segmented at Cross Blvd (X: -17.5 to -2.5)
-    const southAveWestGeo = new THREE.PlaneGeometry(108, 11);
-    southAveWestGeo.rotateX(-Math.PI / 2);
-    const southAveWest = new THREE.Mesh(southAveWestGeo, roadMat);
-    southAveWest.position.set(-71.5, 0.03, 35);
-    southAveWest.receiveShadow = true;
-    this.group.add(southAveWest);
-
-    const southAveEastGeo = new THREE.PlaneGeometry(38, 11);
-    southAveEastGeo.rotateX(-Math.PI / 2);
-    const southAveEast = new THREE.Mesh(southAveEastGeo, roadMat);
-    southAveEast.position.set(16.5, 0.03, 35);
-    southAveEast.receiveShadow = true;
-    this.group.add(southAveEast);
-
-    // East River Road (at X = 30, width 12m) - segmented at Main Avenue (Z: -6 to 12)
-    // North Segment: Z from -63 to -6.0 (length 57m)
-    const eastRiverNorthGeo = new THREE.PlaneGeometry(12, 57);
-    eastRiverNorthGeo.rotateX(-Math.PI / 2);
-    const eastRiverNorth = new THREE.Mesh(eastRiverNorthGeo, roadMat);
-    eastRiverNorth.position.set(30, 0.03, -34.5);
-    eastRiverNorth.receiveShadow = true;
-    this.group.add(eastRiverNorth);
-
-    // South Segment: Z from 12.0 to 47.0 (length 35m)
-    const eastRiverSouthGeo = new THREE.PlaneGeometry(12, 35);
-    eastRiverSouthGeo.rotateX(-Math.PI / 2);
-    const eastRiverSouth = new THREE.Mesh(eastRiverSouthGeo, roadMat);
-    eastRiverSouth.position.set(30, 0.03, 29.5);
-    eastRiverSouth.receiveShadow = true;
-    this.group.add(eastRiverSouth);
-
-    // Matching Brick Sidewalks along East River Road (West side at X = 21.75, East side at X = 38.25)
-    [-1, 1].forEach((dir) => {
-      const swX = 30 + dir * 8.25;
-      // North sidewalk
-      const nWalkGeo = new THREE.BoxGeometry(4.5, 0.16, 54.25);
-      const nWalk = new THREE.Mesh(nWalkGeo, sidewalkMat);
-      nWalk.position.set(swX, 0.08, -35.875);
-      nWalk.receiveShadow = true;
-      this.group.add(nWalk);
-
-      // South sidewalk
-      const sWalkGeo = new THREE.BoxGeometry(4.5, 0.16, 32.25);
-      const sWalk = new THREE.Mesh(sWalkGeo, sidewalkMat);
-      sWalk.position.set(swX, 0.08, 30.875);
-      sWalk.receiveShadow = true;
-      this.group.add(sWalk);
-    });
-
-    // Street Lamps along Main Avenue Sidewalks
-    const lampPositionsX = [-130, -105, -80, -55, -30, 18, 42];
+    // Street Lamps along the entire 326m Main Avenue Sidewalks
+    const lampPositionsX = [
+      -270, -245, -220, -195, -170, -145, -120, -95, -70, -45, -20, 18, 42
+    ];
     lampPositionsX.forEach((lx) => {
       this.buildStreetLamp(lx, 12.5);
       this.buildStreetLamp(lx, -6.5);
     });
 
     // Roadside Planter Trees along sidewalks
-    const treePositionsX = [-120, -95, -70, -45, 24, 45];
+    const treePositionsX = [
+      -260, -235, -210, -185, -160, -135, -110, -85, -60, -35, 24, 45
+    ];
     treePositionsX.forEach((tx) => {
       this.buildRoadsideTree(tx, 15.8);
       this.buildRoadsideTree(tx, -9.8);
     });
 
-    // Stationed Colorful Bangladeshi City Bus ("ঢাকা চাকা মেট্রো স্পেশাল")
+    // Stationed Colorful Bangladeshi City Buses ("ঢাকা চাকা মেট্রো" & "সুপার লিংক")
     this.buildCityBus(-60, 5.5);
+    this.buildCityBus(-150, 5.5);
+    this.buildCityBus(-230, 5.5);
   }
 
   /**

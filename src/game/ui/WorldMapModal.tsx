@@ -27,8 +27,8 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
   onClose,
   onTeleport,
 }) => {
-  // Map world coordinate limits: X: -150 to +350, Z: -150 to +200
-  const worldMinX = -150;
+  // Map world coordinate limits: X: -300 to +350, Z: -150 to +200
+  const worldMinX = -300;
   const worldMaxX = 350;
   const worldMinZ = -150;
   const worldMaxZ = 200;
@@ -121,31 +121,32 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
           {/* 1. City Zone (West) */}
           <div
             className="absolute top-0 bottom-0 left-0 bg-slate-900/90 border-r border-slate-800 pointer-events-none"
-            style={{ width: `${toMapPercentX(65)}%` }}
+            style={{ width: `${toMapPercentX(48)}%` }}
           >
             <div className="absolute top-4 left-5 text-slate-400 font-bold text-xs sm:text-sm tracking-wider uppercase">
-              Dhaka City Avenue
-              <div className="text-[10px] text-slate-500 font-normal">Modern Commercial District</div>
+              Dhaka Metropolis Avenue
+              <div className="text-[10px] text-slate-500 font-normal">Expanded Commercial & Tech District</div>
             </div>
             {/* Roads */}
             <div className="absolute top-[43%] left-0 right-0 h-4 bg-slate-800" />
             <div className="absolute top-0 bottom-0 left-[60%] w-4 bg-slate-800" />
+            <div className="absolute top-0 bottom-0 left-[30%] w-3 bg-slate-800" />
           </div>
 
-          {/* 2. River Padma (Blue Ribbon Channel) */}
+          {/* 2. River Padma (Wide Blue Channel) */}
           <div
             className="absolute top-0 bottom-0 bg-sky-950/80 border-x-2 border-sky-800/40 pointer-events-none"
             style={{
-              left: `${toMapPercentX(65)}%`,
-              width: `${toMapPercentX(115) - toMapPercentX(65)}%`,
+              left: `${toMapPercentX(48)}%`,
+              width: `${toMapPercentX(137) - toMapPercentX(48)}%`,
             }}
           >
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rotate-90 text-sky-400/60 font-black tracking-widest text-[11px]">
-              PADMA RIVER
+              PADMA RIVER · নদীর পাড়
             </div>
             {/* Grand Bridge Crossing */}
             <div className="absolute top-[43%] left-0 right-0 h-4 bg-amber-500/80 border-y border-amber-300 flex items-center justify-center">
-              <span className="text-[8px] font-bold text-slate-950 tracking-tighter">PADMA BRIDGE</span>
+              <span className="text-[8px] font-bold text-slate-950 tracking-tighter">PADMA RAINBOW BRIDGE</span>
             </div>
           </div>
 
@@ -153,7 +154,7 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
           <div
             className="absolute bottom-0 right-0 bg-emerald-950/40 border-t border-emerald-900/30 pointer-events-none"
             style={{
-              left: `${toMapPercentX(115)}%`,
+              left: `${toMapPercentX(137)}%`,
               height: `${100 - toMapPercentY(25)}%`,
             }}
           >

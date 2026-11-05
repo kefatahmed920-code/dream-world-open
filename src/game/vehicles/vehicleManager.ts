@@ -61,6 +61,36 @@ export class VehicleManager {
       handling: 1.8,
     };
     this.createSedanCar(carConfig, getTerrainHeight);
+
+    // 3. West Commercial Plaza Sedan (parked at X = -160, Z = 8.5)
+    const westCarConfig: VehicleConfig = {
+      id: 'veh_car_west',
+      type: 'car',
+      name: 'West Plaza Turbo',
+      nameBn: 'ওয়েস্ট প্লাজা টার্বো কার',
+      position: [-160, 0, 8.5],
+      rotationY: Math.PI * 0.5,
+      color: '#dc2626', // Crimson Red
+      maxSpeed: 30,
+      acceleration: 15,
+      handling: 2.0,
+    };
+    this.createSedanCar(westCarConfig, getTerrainHeight);
+
+    // 4. Metro IT Park CNG (parked at X = -210, Z = 14.8)
+    const westCngConfig: VehicleConfig = {
+      id: 'veh_cng_west',
+      type: 'cng',
+      name: 'Metro Green CNG',
+      nameBn: 'মেট্রো গ্রিন সিএনজি',
+      position: [-210, 0, 14.8],
+      rotationY: Math.PI * 0.5,
+      color: '#16a34a',
+      maxSpeed: 18,
+      acceleration: 8,
+      handling: 2.2,
+    };
+    this.createCNGRickshaw(westCngConfig, getTerrainHeight);
   }
 
   /**

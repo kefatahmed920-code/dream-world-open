@@ -33,11 +33,11 @@ export class RiverEcosystem {
   private splashGroup: THREE.Group;
   private activeSplashes: { mesh: THREE.Mesh; timer: number; maxTime: number; startScale: number }[] = [];
 
-  // River boundaries
-  private readonly riverMinX = 70;
-  private readonly riverMaxX = 105;
-  private readonly riverMinZ = -220;
-  private readonly riverMaxZ = 220;
+  // River boundaries for wide Padma River
+  private readonly riverMinX = 56;
+  private readonly riverMaxX = 130;
+  private readonly riverMinZ = -260;
+  private readonly riverMaxZ = 260;
   private readonly waterSurfaceY = -0.4;
 
   constructor() {
@@ -117,7 +117,7 @@ export class RiverEcosystem {
 
     for (let i = 0; i < rockCount; i++) {
       const isWestBank = i < rockCount / 2;
-      const bankX = isWestBank ? 63.2 + (Math.random() - 0.5) * 1.5 : 111.8 + (Math.random() - 0.5) * 1.5;
+      const bankX = isWestBank ? 51.5 + (Math.random() - 0.5) * 2.0 : 133.5 + (Math.random() - 0.5) * 2.0;
       const z = -180 + (i % (rockCount / 2)) * 24 + (Math.random() - 0.5) * 8;
       const y = -0.3 + (Math.random() - 0.5) * 0.15;
       const scale = 0.5 + Math.random() * 0.9;

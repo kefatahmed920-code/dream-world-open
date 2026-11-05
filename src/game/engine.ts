@@ -778,9 +778,9 @@ export class GameEngine {
       }
     }
 
-    // 4. Check Kashem Majhi Fishing Challenge on Wooden River Pier ([66.5, 0.5, 14.2])
-    const pierMajhiPos = new THREE.Vector3(66.5, 0.5, 14.2);
-    if (playerPos.distanceTo(pierMajhiPos) < 3.5) {
+    // 4. Check Kashem Majhi Fishing Challenge on Wooden River Pier
+    const pierMajhiPos = this.terrain.kaifengBridge?.fishermanPos || new THREE.Vector3(54.2, 0.5, 14.2);
+    if (playerPos.distanceTo(pierMajhiPos) < 3.8) {
       this.callbacks.onInteractionPrompt?.('[E] মাছ ধরার প্রতিযোগিতা শুরু করুন / 2-Min Fishing Challenge');
       if (input.interact) {
         soundManager.playCollectCoin();
@@ -975,10 +975,10 @@ export class GameEngine {
    * Completely excludes the Padma river, rural village, mountain slopes, and obstacles.
    */
   public getRandomCitySpawn(): THREE.Vector3 {
-    // City bounds: X from -120 to 45, Z from -30 to 30
+    // Vast expanded city bounds: X from -250 to 38, Z from -60 to 50
     for (let attempt = 0; attempt < 30; attempt++) {
-      const x = -110 + Math.random() * 145; // between -110 and +35
-      const z = -25 + Math.random() * 50;  // between -25 and +25
+      const x = -240 + Math.random() * 275; // between -240 and +35
+      const z = -45 + Math.random() * 85;  // between -45 and +40
       const y = this.terrain.getTerrainHeight(x, z);
 
       // Exclude water & river
