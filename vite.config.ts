@@ -5,9 +5,12 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig(() => {
+export default defineConfig(({ command }) => {
+  const isDev = command === 'serve';
+  const base = process.env.VITE_BASE_PATH || (isDev ? '/' : (process.env.GITHUB_ACTIONS ? '/dream-world-open/' : '/'));
+
   return {
-    base: '/dream-world-open/',
+    base,
     plugins: [
       react(),
       tailwindcss(),
@@ -15,7 +18,7 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
-          id: '/dream-world-open/',
+          id: base,
           name: 'DREAM WORLD: 3D Open-World Adventure',
           short_name: 'DreamWorld',
           description:
@@ -24,23 +27,23 @@ export default defineConfig(() => {
           background_color: '#020617',
           display: 'fullscreen',
           orientation: 'landscape',
-          start_url: '/dream-world-open/',
-          scope: '/dream-world-open/',
+          start_url: base,
+          scope: base,
           icons: [
             {
-              src: '/dream-world-open/pwa-192x192.png',
+              src: `${base}pwa-192x192.png`,
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/dream-world-open/pwa-512x512.png',
+              src: `${base}pwa-512x512.png`,
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/dream-world-open/pwa-maskable-512x512.png',
+              src: `${base}pwa-maskable-512x512.png`,
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',

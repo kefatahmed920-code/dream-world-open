@@ -12,7 +12,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
 const app = express();
@@ -1013,9 +1013,9 @@ async function setupServer() {
     });
   }
 
-  server.listen(PORT, () => {
-    console.log(`[DREAM WORLD SERVER] Listening on http://localhost:${PORT}`);
-    console.log(`[DREAM WORLD WEBSOCKET] Endpoint ready at ws://localhost:${PORT}/ws/game`);
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`[DREAM WORLD SERVER] Listening on http://0.0.0.0:${PORT}`);
+    console.log(`[DREAM WORLD WEBSOCKET] Endpoint ready at ws://0.0.0.0:${PORT}/ws/game`);
   });
 }
 
