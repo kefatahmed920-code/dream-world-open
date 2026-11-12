@@ -10,6 +10,7 @@ import { NetworkConfig } from '../config/networkConfig';
 export interface RemotePlayerState {
   id: string;
   name: string;
+  mapId?: string;
   position: [number, number, number];
   rotationY: number;
   speed: number;
@@ -25,6 +26,7 @@ export interface RemotePlayerState {
 export class RemotePlayerActor {
   public id: string;
   public name: string;
+  public mapId: string = 'bangladesh_open_world';
   public rig: CharacterRig;
   public targetPos = new THREE.Vector3();
   public targetRotY = 0;
@@ -37,6 +39,7 @@ export class RemotePlayerActor {
   constructor(state: RemotePlayerState, scene: THREE.Scene) {
     this.id = state.id;
     this.name = state.name;
+    this.mapId = state.mapId || 'bangladesh_open_world';
     this.inPrivateHome = !!state.inPrivateHome;
     this.rig = new CharacterRig(state.appearance);
 
@@ -88,7 +91,14 @@ export class RemotePlayerActor {
     return sprite;
   }
 
-  public update(delta: number) {
+  public update(delta: number, currentMapId?: string) {
+    if (currentMapId) {
+      const shouldBeVisible = this.mapId === currentMapId && !this.inPrivateHome;
+      if (this.rig.group.visible !== shouldBeVisible) {
+        this.setVisibility(shouldBeVisible);
+      }
+    }
+
     // Smooth position interpolation
     this.rig.group.position.lerp(this.targetPos, 1 - Math.exp(-12 * delta));
 
@@ -129,6 +139,7 @@ export class MultiplayerManager {
   public localPlayerId: string;
   public localPlayerName = 'Explorer';
   public currentRoom = 'Dhaka-Hub-1';
+  public activeMapId: string = 'bangladesh_open_world';
   public serverPlayerCount = 1;
   public latencyMs = 0;
   public locationState: 'PRIVATE_HOME' | 'SHARED_CITY' = 'SHARED_CITY';
@@ -442,6 +453,23 @@ export class MultiplayerManager {
     return list;
   }
 
+  public switchMap(mapId: string, position: THREE.Vector3) {
+    this.activeMapId = mapId;
+    this.sendMessage({
+      type: 'map_transition',
+      senderId: this.localPlayerId,
+      name: this.localPlayerName,
+      mapId,
+      position: [position.x, position.y, position.z],
+      time: Date.now(),
+    });
+
+    // Update visibility of remote actors immediately
+    for (const actor of this.remotePlayers.values()) {
+      actor.setVisibility(actor.mapId === this.activeMapId && !actor.inPrivateHome);
+    }
+  }
+
   public sendLocalState(
     position: THREE.Vector3,
     rotationY: number,
@@ -465,6 +493,7 @@ export class MultiplayerManager {
       type: 'update',
       senderId: this.localPlayerId,
       name: this.localPlayerName,
+      mapId: this.activeMapId,
       position: [position.x, position.y, position.z],
       rotationY,
       speed,
@@ -496,6 +525,7 @@ export class MultiplayerManager {
             const state: RemotePlayerState = {
               id: p.id,
               name: p.name || 'Explorer',
+              mapId: (p as { mapId?: string }).mapId || 'bangladesh_open_world',
               position: p.position || [6, 0, 12],
               rotationY: p.rotationY || 0,
               speed: p.speed || 0,
@@ -506,6 +536,7 @@ export class MultiplayerManager {
               lastUpdate: Date.now(),
             };
             const actor = new RemotePlayerActor(state, this.scene);
+            actor.setVisibility(actor.mapId === this.activeMapId && !actor.inPrivateHome);
             this.remotePlayers.set(p.id, actor);
           }
         }
@@ -528,6 +559,35 @@ export class MultiplayerManager {
 
     const senderId = data.senderId as string;
     const name = (data.name as string) || 'Player';
+
+    // Handle Peer Map Transition
+    if (data.type === 'player_map_switched') {
+      let actor = this.remotePlayers.get(senderId);
+      if (actor) {
+        actor.mapId = (data.mapId as string) || 'bangladesh_open_world';
+        if (data.position && Array.isArray(data.position)) {
+          actor.targetPos.set(data.position[0], data.position[1], data.position[2]);
+        }
+        actor.setVisibility(actor.mapId === this.activeMapId && !actor.inPrivateHome);
+      } else if (data.appearance) {
+        const state: RemotePlayerState = {
+          id: senderId,
+          name,
+          mapId: (data.mapId as string) || 'bangladesh_open_world',
+          position: (data.position as [number, number, number]) || [6, 0, 12],
+          rotationY: (data.rotationY as number) || 0,
+          speed: 0,
+          isAirborne: false,
+          isDriving: false,
+          appearance: data.appearance as CharacterAppearance,
+          lastUpdate: Date.now(),
+        };
+        actor = new RemotePlayerActor(state, this.scene);
+        actor.setVisibility(actor.mapId === this.activeMapId && !actor.inPrivateHome);
+        this.remotePlayers.set(senderId, actor);
+      }
+      return;
+    }
 
     // Handle Player Join (support both server 'player_joined' and client 'join')
     if (data.type === 'player_joined' || data.type === 'join') {
@@ -600,6 +660,7 @@ export class MultiplayerManager {
         const state: RemotePlayerState = {
           id: senderId,
           name,
+          mapId: (data.mapId as string) || 'bangladesh_open_world',
           position: data.position as [number, number, number],
           rotationY: data.rotationY as number,
           speed: data.speed as number,
@@ -610,11 +671,17 @@ export class MultiplayerManager {
           lastUpdate: Date.now(),
         };
         actor = new RemotePlayerActor(state, this.scene);
+        actor.setVisibility(actor.mapId === this.activeMapId && !actor.inPrivateHome);
         this.remotePlayers.set(senderId, actor);
         this.onPlayerJoined?.(name);
         this.serverPlayerCount = Math.max(this.serverPlayerCount, this.remotePlayers.size + 1);
         this.onConnectionChanged?.(this.isConnected, this.serverPlayerCount, this.connectionMessage);
       }
+
+      if (data.mapId) {
+        actor.mapId = data.mapId as string;
+      }
+      actor.setVisibility(actor.mapId === this.activeMapId && !actor.inPrivateHome);
 
       // Update target transform and private home state
       const pos = data.position as [number, number, number];
@@ -652,10 +719,9 @@ export class MultiplayerManager {
       this.sendPing();
     }
 
-    // Update all remote players in the shared open world
+    // Update all remote players in the shared world, filtering by active map
     for (const actor of this.remotePlayers.values()) {
-      actor.update(delta);
-      actor.setVisibility(true);
+      actor.update(delta, this.activeMapId);
     }
   }
 

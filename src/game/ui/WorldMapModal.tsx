@@ -266,10 +266,16 @@ export const WorldMapModal: React.FC<WorldMapModalProps> = ({
                 🌉 Padma Bridge
               </button>
               <button
-                onClick={() => handleFastTravel(165, 95)}
+                onClick={() => handleFastTravel(125, 3)}
+                className="px-2.5 py-1 rounded-lg bg-cyan-950 hover:bg-cyan-900 text-cyan-300 text-xs font-semibold border border-cyan-500/50 transition-colors"
+              >
+                ⛩️ Kaifeng World Portal
+              </button>
+              <button
+                onClick={() => handleFastTravel(170, 40)}
                 className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
               >
-                🌾 Shonar Village
+                🌿 Rebuilt River Meadow
               </button>
               <button
                 onClick={() => handleFastTravel(255, -85)}

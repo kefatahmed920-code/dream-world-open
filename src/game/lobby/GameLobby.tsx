@@ -49,7 +49,7 @@ interface GameLobbyProps {
   appearance: CharacterAppearance;
   playerStats: PlayerStats;
   currentRoom?: string;
-  onStartGame: (mode: 'single' | 'multiplayer') => void;
+  onStartGame: (mode: 'single' | 'multiplayer', mapId?: string) => void;
   onOpenCharacterSelect: () => void;
   onOpenInventory: () => void;
   onOpenSettings: () => void;
@@ -213,7 +213,7 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
     soundManager.resume();
     soundManager.playCollectCoin();
     requestLandscapeAndFullscreen();
-    onStartGame(teamMode === 'solo' ? 'single' : 'multiplayer');
+    onStartGame(teamMode === 'solo' ? 'single' : 'multiplayer', selectedWorldMap);
   };
 
   const handleClaimReward = (amt: number) => {

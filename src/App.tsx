@@ -6,7 +6,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { GameEngine } from './game/engine';
 import { HUD } from './game/ui/HUD';
-import { MobileControls } from './game/ui/MobileControls';
+import { CustomizeHudModal } from './game/ui/CustomizeHudModal';
 import { DialogueModal } from './game/ui/DialogueModal';
 import { WorldMapModal } from './game/ui/WorldMapModal';
 import { InventoryModal } from './game/ui/InventoryModal';
@@ -51,6 +51,8 @@ export default function App() {
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isCustomizeHudOpen, setIsCustomizeHudOpen] = useState(false);
+  const [activeWeaponSlot, setActiveWeaponSlot] = useState(0);
   const [isMultiplayerOpen, setIsMultiplayerOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isPublishGuideOpen, setIsPublishGuideOpen] = useState(false);
@@ -120,6 +122,7 @@ export default function App() {
   const [fps, setFps] = useState<number>(60);
   const [frameTime, setFrameTime] = useState<number>(16.6);
   const [toastNotification, setToastNotification] = useState<{ title?: string; msg: string } | null>(null);
+  const [combatHit, setCombatHit] = useState<{ isHeadshot: boolean; targetName: string; time: number } | null>(null);
   const [isMobile, setIsMobile] = useState<boolean>(false);
 
   // Check touch / mobile screen
@@ -201,6 +204,9 @@ export default function App() {
       onOpenVillageSpeaker: () => {
         setIsVillageSpeakerOpen(true);
       },
+      onCombatHit: (hit) => {
+        setCombatHit({ ...hit, time: Date.now() });
+      },
     });
 
     engine.voiceChatManager.onStateChanged = (state) => {
@@ -258,11 +264,31 @@ export default function App() {
         setIsMapOpen((prev) => !prev);
       } else if (e.code === 'KeyI') {
         setIsInventoryOpen((prev) => !prev);
+      } else if (e.code === 'KeyP') {
+        setIsSmartphoneOpen((prev) => !prev);
+      } else if (e.code === 'KeyR') {
+        engineRef.current?.reloadWeapon();
+      } else if (e.code === 'Digit1') {
+        engineRef.current?.equipSlot(0);
+        setActiveWeaponSlot(0);
+      } else if (e.code === 'Digit2') {
+        engineRef.current?.equipSlot(1);
+        setActiveWeaponSlot(1);
+      } else if (e.code === 'Digit3') {
+        engineRef.current?.equipSlot(2);
+        setActiveWeaponSlot(2);
+      } else if (e.code === 'Digit4') {
+        engineRef.current?.equipSlot(3);
+        setActiveWeaponSlot(3);
+      } else if (e.code === 'Digit5') {
+        engineRef.current?.equipSlot(4);
+        setActiveWeaponSlot(4);
       } else if (e.code === 'Escape') {
         let anyClosed = false;
         setActiveDialogueNPC((curr) => { if (curr) anyClosed = true; return null; });
         setIsMapOpen((curr) => { if (curr) anyClosed = true; return false; });
         setIsInventoryOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsCustomizeHudOpen((curr) => { if (curr) anyClosed = true; return false; });
         setIsMultiplayerOpen((curr) => { if (curr) anyClosed = true; return false; });
         setIsInstallModalOpen((curr) => { if (curr) anyClosed = true; return false; });
         setIsPublishGuideOpen((curr) => { if (curr) anyClosed = true; return false; });
@@ -277,6 +303,7 @@ export default function App() {
         setIsCyberTeslaOpen((curr) => { if (curr) anyClosed = true; return false; });
         setIsSignboardModalOpen((curr) => { if (curr) anyClosed = true; return false; });
         setIsReturnHomeModalOpen((curr) => { if (curr) anyClosed = true; return false; });
+        setIsSmartphoneOpen((curr) => { if (curr) anyClosed = true; return false; });
 
         setIsSettingsOpen((curr) => (curr ? false : anyClosed ? false : true));
       }
@@ -335,7 +362,7 @@ export default function App() {
     };
   }, [gameState, currentUser]);
 
-  const handleStartGame = (mode: 'single' | 'multiplayer') => {
+  const handleStartGame = (mode: 'single' | 'multiplayer', mapId?: string) => {
     if (!currentUser) {
       setIsAuthOpen(true);
       showToast('গেম খেলার আগে অনুগ্রহ করে আপনার নাম ও ইমেইল দিয়ে সাইন ইন করুন', 'SIGN IN REQUIRED');
@@ -345,6 +372,13 @@ export default function App() {
     setGameState('playing');
     // Automatically connect to the production multiplayer backend on start
     engineRef.current?.multiplayerManager.startOnlineMultiplayer();
+
+    // Unified Map Integration: MAP 01 (Kaifeng) or MAP 02 (Bangladesh World)
+    if (mapId === 'kaifeng_battle_royale') {
+      engineRef.current?.switchMap('kaifeng_battle_royale');
+    } else {
+      engineRef.current?.switchMap('bangladesh_open_world');
+    }
 
     // Register active game play session with server
     fetch(NetworkConfig.getApiUrl('/api/sessions/start'), {
@@ -463,65 +497,65 @@ export default function App() {
         />
       )}
 
-      {/* In-Game Playing HUD */}
+      {/* In-Game Playing HUD (Unified Premium DREAM WORLD HUD) */}
       {gameState === 'playing' && (
-        <>
-          <HUD
-            stats={playerStats}
-            activeVehicle={activeVehicle}
-            interactionPrompt={interactionPrompt}
-            playerPos={playerPos}
-            playerYaw={playerYaw}
-            onlineCount={onlineCount}
-            isVoiceActive={isVoiceActive}
-            isMicMuted={isMicMuted}
-            isDeafened={isDeafened}
-            isSpeaking={isSpeaking}
-            unreadChatCount={unreadChatCount}
-            customWaypoint={customWaypoint}
-            autoplayBlocked={autoplayBlocked}
-            fps={fps}
-            frameTime={frameTime}
-            playerStance={playerStance}
-            isDiving={isDiving}
-            playerLocation={playerLocation}
-            onReturnHome={() => setIsReturnHomeModalOpen(true)}
-            onOpenMap={() => setIsMapOpen(true)}
-            onOpenChat={() => {
-              setIsChatOpen(true);
-              setUnreadChatCount(0);
-            }}
-            onOpenPlayers={() => setIsPlayerListOpen(true)}
-            onOpenStats={() => setIsStatsOpen(true)}
-            onOpenRankings={() => setIsRankingsOpen(true)}
-            onToggleVoice={handleToggleVoice}
-            onToggleDeafen={handleToggleDeafen}
-            onUnlockAudio={() => {
-              engineRef.current?.voiceChatManager.unlockAudio();
-              setAutoplayBlocked(false);
-              showToast('Voice audio enabled', 'VOICE CHAT');
-            }}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            onOpenInventory={() => setIsInventoryOpen(true)}
-            onOpenSmartphone={() => setIsSmartphoneOpen(true)}
-            onReturnToLobby={() => setGameState('title')}
-          />
-
-          {/* On-Screen Mobile Joystick & Tactical HUD Controls */}
-          {isMobile && engineRef.current && (
-            <MobileControls
-              inputManager={engineRef.current.inputManager}
-              isDriving={!!activeVehicle}
-              canInteract={!!interactionPrompt && interactionPrompt.includes('Talk')}
-              canDrive={!!interactionPrompt && interactionPrompt.includes('Drive')}
-              interactionPrompt={interactionPrompt}
-              playerStance={playerStance}
-              isSwimming={isSwimming}
-              onOpenInventory={() => setIsInventoryOpen(true)}
-              onOpenMap={() => setIsMapOpen(true)}
-            />
-          )}
-        </>
+        <HUD
+          stats={playerStats}
+          activeVehicle={activeVehicle}
+          interactionPrompt={interactionPrompt}
+          playerPos={playerPos}
+          playerYaw={playerYaw}
+          onlineCount={onlineCount}
+          isVoiceActive={isVoiceActive}
+          isMicMuted={isMicMuted}
+          isDeafened={isDeafened}
+          isSpeaking={isSpeaking}
+          unreadChatCount={unreadChatCount}
+          customWaypoint={customWaypoint}
+          autoplayBlocked={autoplayBlocked}
+          fps={fps}
+          frameTime={frameTime}
+          playerStance={playerStance}
+          isDiving={isDiving}
+          playerLocation={playerLocation}
+          inputManager={engineRef.current?.inputManager}
+          activeWeaponSlot={activeWeaponSlot}
+          weaponSlots={engineRef.current?.weaponSlots}
+          onFireWeapon={() => engineRef.current?.fireWeapon()}
+          onReloadWeapon={() => engineRef.current?.reloadWeapon()}
+          onQuickHeal={() => engineRef.current?.quickHeal()}
+          onSetAim={(aim) => engineRef.current?.setAim(aim)}
+          onCyclePerspective={() => engineRef.current?.cycleCameraPerspective()}
+          onEquipSlot={(slot) => {
+            engineRef.current?.equipSlot(slot);
+            setActiveWeaponSlot(slot);
+          }}
+          onReturnHome={() => setIsReturnHomeModalOpen(true)}
+          onOpenMap={() => setIsMapOpen(true)}
+          onOpenChat={() => {
+            setIsChatOpen(true);
+            setUnreadChatCount(0);
+          }}
+          onOpenPlayers={() => setIsPlayerListOpen(true)}
+          onOpenStats={() => setIsStatsOpen(true)}
+          onOpenRankings={() => setIsRankingsOpen(true)}
+          onToggleVoice={handleToggleVoice}
+          onToggleDeafen={handleToggleDeafen}
+          onUnlockAudio={() => {
+            engineRef.current?.voiceChatManager.unlockAudio();
+            setAutoplayBlocked(false);
+            showToast('Voice audio enabled', 'VOICE CHAT');
+          }}
+          connectedPlayers={connectedPlayers}
+          combatHit={combatHit}
+          onSendMessage={handleSendMessage}
+          onOpenCustomizeHud={() => setIsCustomizeHudOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenInventory={() => setIsInventoryOpen(true)}
+          onOpenSmartphone={() => setIsSmartphoneOpen(true)}
+          onReturnToLobby={() => setGameState('title')}
+          onOpenCharacterSelect={() => setIsCharacterSelectOpen(true)}
+        />
       )}
 
       {/* Floating Notification Toast */}
@@ -588,11 +622,26 @@ export default function App() {
           onSetTimeOfDay={handleSetTimeOfDay}
           onSetWeather={handleSetWeather}
           onSaveGame={handleSaveGame}
+          onOpenCustomizeHud={() => {
+            setIsSettingsOpen(false);
+            setIsCustomizeHudOpen(true);
+          }}
           onExitToLobby={() => {
             setIsSettingsOpen(false);
             setGameState('title');
           }}
           onClose={() => setIsSettingsOpen(false)}
+        />
+      )}
+
+      {/* Customize HUD Layout Modal */}
+      {isCustomizeHudOpen && (
+        <CustomizeHudModal
+          isOpen={isCustomizeHudOpen}
+          onClose={() => setIsCustomizeHudOpen(false)}
+          onLayoutUpdated={() => {
+            window.dispatchEvent(new Event('dream_hud_layout_changed'));
+          }}
         />
       )}
 

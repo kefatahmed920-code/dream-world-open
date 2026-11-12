@@ -22,6 +22,7 @@ import { RiverEcosystem } from './world/riverEcosystem';
 import { GameDoorMetadata } from '../game-house/gameRegistry';
 import { TeddyBearCompanion, TeddyBearType, PetToyAccessory } from './character/TeddyBearCompanion';
 import { PetCompanionModel } from './lobby/PetCompanionModel';
+import { KaifengWorld } from './kaifeng/KaifengWorld';
 
 export interface GameEngineCallbacks {
   onInteractionPrompt?: (prompt: string | null) => void;
@@ -39,6 +40,7 @@ export interface GameEngineCallbacks {
   onPlayerLocationChanged?: (location: 'PRIVATE_HOME' | 'SHARED_CITY') => void;
   onStartFishingChallenge?: () => void;
   onOpenVillageSpeaker?: () => void;
+  onCombatHit?: (hit: { isHeadshot: boolean; targetName: string }) => void;
 }
 
 // Static preallocated scratch objects to eliminate per-frame GC heap churn
@@ -71,6 +73,8 @@ export class GameEngine {
   public companionPet: TeddyBearCompanion | null = null;
   public companionDrone: PetCompanionModel | null = null;
   public playerLocation: 'PRIVATE_HOME' | 'SHARED_CITY' = 'SHARED_CITY';
+  public activeMapId: 'bangladesh_open_world' | 'kaifeng_battle_royale' = 'bangladesh_open_world';
+  public kaifengWorld: KaifengWorld | null = null;
 
   // Player Physics & Locomotion State
   public playerVelocity = new THREE.Vector3();
@@ -336,7 +340,7 @@ export class GameEngine {
    */
   public update(delta: number) {
     const input = this.inputManager.pollInput();
-    const heightFunc = (x: number, z: number) => this.terrain.getTerrainHeight(x, z);
+    const heightFunc = (x: number, z: number) => this.getTerrainHeight(x, z);
 
     // 1. Camera Orbit Rotation from Mouse/Touch
     if (input.cameraRotateX !== 0 || input.cameraRotateY !== 0) {
@@ -473,29 +477,29 @@ export class GameEngine {
       const stats = this.questManager.playerStats;
 
       if (this.isSwimming) {
-        if (input.sprint && stats.stamina > 5) {
-          baseSpeed = 5.0;
+        if (input.sprint) {
+          baseSpeed = 6.0;
           animSpeed = 1.0;
-          stats.stamina = Math.max(0, stats.stamina - delta * 8);
+          stats.stamina = Math.max(0, stats.stamina - delta * 4);
         } else {
-          baseSpeed = 3.0;
+          baseSpeed = 3.2;
           animSpeed = 0.65;
           stats.stamina = Math.min(stats.maxStamina, stats.stamina + delta * 3.5);
         }
       } else if (this.playerStance === 'prone') {
-        baseSpeed = 1.35; // Authentic army crawl pace
-        animSpeed = 0.45;
-        stats.stamina = Math.min(stats.maxStamina, stats.stamina + delta * 5);
-      } else if (this.playerStance === 'crouch') {
-        baseSpeed = 2.4;
+        baseSpeed = 1.5; // Tactical army crawl pace
         animSpeed = 0.5;
         stats.stamina = Math.min(stats.maxStamina, stats.stamina + delta * 5);
+      } else if (this.playerStance === 'crouch') {
+        baseSpeed = 2.8;
+        animSpeed = 0.55;
+        stats.stamina = Math.min(stats.maxStamina, stats.stamina + delta * 5);
       } else {
-        // Standard Standing Walk / Run / Sprint
-        if (input.sprint && stats.stamina > 5) {
-          baseSpeed = 8.5;
-          animSpeed = 1.0;
-          stats.stamina = Math.max(0, stats.stamina - delta * 6);
+        // Standard Standing Walk / Run / Sprint (Super responsive 10.8 m/s sprint)
+        if (input.sprint) {
+          baseSpeed = 10.8;
+          animSpeed = 1.05;
+          stats.stamina = Math.max(0, stats.stamina - delta * 3);
         } else if (hasMoveInput) {
           baseSpeed = 4.8;
           animSpeed = 0.65;
@@ -557,7 +561,7 @@ export class GameEngine {
         }
       } else {
         // On Land: Terrain elevation & airborne gravity
-        const groundY = this.terrain.getTerrainHeight(playerPos.x, playerPos.z, playerPos.y);
+        const groundY = this.getTerrainHeight(playerPos.x, playerPos.z, playerPos.y);
 
         if (this.isAirborne) {
           this.verticalSpeed -= 22 * delta; // Gravity
@@ -662,9 +666,12 @@ export class GameEngine {
     const wfDist = playerPos.distanceTo(_wfTarget);
     soundManager.updateAmbience(wfDist, this.weatherManager.weather === 'rain');
 
-    if (this.terrain.countrysideVillage) {
-      const speakerDist = playerPos.distanceTo(this.terrain.countrysideVillage.speakerPos);
-      soundManager.updateVillageMusicSpatial(speakerDist);
+    if (this.activeMapId === 'kaifeng_battle_royale' && this.kaifengWorld) {
+      this.kaifengWorld.update(delta, performance.now() * 0.001);
+    } else {
+      if (this.terrain.countrysideVillage) {
+        this.terrain.countrysideVillage.update(delta, false);
+      }
     }
 
     // 9. Check Quest Distance Triggers
@@ -800,58 +807,41 @@ export class GameEngine {
       return;
     }
 
-    // 6. Check Village Outdoor Music Speaker System beside Giant Tree
-    if (this.terrain.countrysideVillage) {
-      const spk = this.terrain.countrysideVillage.speakerPos;
-      if (playerPos.distanceTo(spk) < 3.8) {
-        this.callbacks.onInteractionPrompt?.('[E] সাউন্ড সিস্টেম / Village Music Speaker System');
+    // 6. In Bangladesh World: Kaifeng World Gateway Portal at Eastern Bridgehead (X: 125, Z: 3)
+    if (this.activeMapId === 'bangladesh_open_world' && this.terrain.countrysideVillage) {
+      const portal = this.terrain.countrysideVillage.kaifengPortalPos;
+      if (playerPos.distanceTo(portal) < 5.2) {
+        this.callbacks.onInteractionPrompt?.('[E] কাইফেং সাম্রাজ্য পোর্টাল / Travel to Kaifeng World (Map 01)');
         if (input.interact) {
           soundManager.playCollectCoin();
-          this.callbacks.onOpenVillageSpeaker?.();
+          this.switchMap('kaifeng_battle_royale');
+        }
+        return;
+      }
+    }
+
+    // 7. In Kaifeng World: Return Portal (X: 120, Z: 35) & Tactical Supply Airdrop Crates
+    if (this.activeMapId === 'kaifeng_battle_royale' && this.kaifengWorld) {
+      const retPortal = this.kaifengWorld.returnPortalPos;
+      if (playerPos.distanceTo(retPortal) < 5.2) {
+        this.callbacks.onInteractionPrompt?.('[E] বাংলাদেশ ওয়ার্ল্ড পোর্টাল / Return to Bangladesh World (Map 02)');
+        if (input.interact) {
+          soundManager.playCollectCoin();
+          this.switchMap('bangladesh_open_world');
         }
         return;
       }
 
-      // 7. Check Village Pond Wooden Fishing Platform
-      const pondPier = this.terrain.countrysideVillage.pondPierPos;
-      if (playerPos.distanceTo(pondPier) < 4.2) {
-        this.callbacks.onInteractionPrompt?.('[E] পুকুরে মাছ ধরুন / Fish in Village Pond');
+      // Check nearest Battle Royale Supply Crate (Exploration loot)
+      const crate = this.kaifengWorld.battleRoyale.getNearestSupplyCrate(playerPos, 4.0);
+      if (crate && !crate.isLooted) {
+        this.callbacks.onInteractionPrompt?.(`[E] Open ${crate.name} (Supply Loot)`);
         if (input.interact) {
+          crate.isLooted = true;
+          crate.beaconLight.intensity = 0;
           soundManager.playCollectCoin();
-          this.callbacks.onStartFishingChallenge?.();
-        }
-        return;
-      }
-
-      // 8. Check Dream World High School Gate
-      const schGate = this.terrain.countrysideVillage.schoolGatePos;
-      if (playerPos.distanceTo(schGate) < 4.0) {
-        this.callbacks.onInteractionPrompt?.('[E] ড্রিম ওয়ার্ল্ড হাই স্কুল / Dream World High School');
-        if (input.interact) {
-          soundManager.playCollectCoin();
-          this.callbacks.onNotification?.('ড্রিম ওয়ার্ল্ড হাই স্কুল ক্যাম্পাসে স্বাগতম! সুন্দর ফুটবল মাঠ ও খেলার জায়গা।', 'HIGH SCHOOL');
-        }
-        return;
-      }
-
-      // 9. Check Vegetable Garden & Tube-Well Shed
-      const shedPos = this.terrain.countrysideVillage.gardenShedPos;
-      if (playerPos.distanceTo(shedPos) < 3.8) {
-        this.callbacks.onInteractionPrompt?.('[E] সবজি বাগান ও টিউবওয়েল / Countryside Garden Harvest');
-        if (input.interact) {
-          soundManager.playCollectCoin();
-          this.callbacks.onNotification?.('তাজা মিষ্টি বেগুন, লালশাক ও ভুট্টা সংগ্রহ করা হয়েছে!', 'FARM FRESH');
-        }
-        return;
-      }
-
-      // 10. Check Hilltop Scenic Viewpoint Gazebo
-      const gazeboPos = this.terrain.countrysideVillage.hillGazeboPos;
-      if (playerPos.distanceTo(gazeboPos) < 4.5) {
-        this.callbacks.onInteractionPrompt?.('[E] পাহাড়চূড়ার ভিউপয়েন্ট গেজেবো / Scenic Overlook Gazebo');
-        if (input.interact) {
-          soundManager.playCollectCoin();
-          this.callbacks.onNotification?.('পাহাড়ের চূড়া থেকে পুকুর, প্লাজা ও পুরো গ্রামের মনোরম দৃশ্য উপভোগ করছেন!', 'SCENIC VIEW');
+          this.quickHeal();
+          this.callbacks.onNotification?.(`Looted ${crate.name}! Medical supplies recovered.`, 'SUPPLY LOOT');
         }
         return;
       }
@@ -915,8 +905,69 @@ export class GameEngine {
     }
   }
 
+  public getTerrainHeight(x: number, z: number, y?: number): number {
+    if (this.activeMapId === 'kaifeng_battle_royale' && this.kaifengWorld) {
+      return this.kaifengWorld.getTerrainHeight(x, z);
+    }
+    return this.terrain.getTerrainHeight(x, z, y);
+  }
+
+  public switchMap(targetMapId: 'bangladesh_open_world' | 'kaifeng_battle_royale') {
+    if (targetMapId === this.activeMapId && this.kaifengWorld) return;
+
+    if (targetMapId === 'kaifeng_battle_royale') {
+      // Lazy-load Kaifeng 3D World (progressive loading to avoid initial GPU memory pressure)
+      if (!this.kaifengWorld) {
+        this.kaifengWorld = new KaifengWorld();
+        this.scene.add(this.kaifengWorld.group);
+      }
+      this.kaifengWorld.group.visible = true;
+
+      // Hide Bangladesh World environments
+      this.terrain.group.visible = false;
+      this.riverEcosystem.group.visible = false;
+      this.npcManager.group.visible = false;
+      this.vehicleManager.group.visible = false;
+
+      // Teleport player to Kaifeng Southern Arrival Courtyard (District 1: X=120, Z=35)
+      const groundY = this.kaifengWorld.getTerrainHeight(120, 35) + 0.1;
+      this.playerRig.group.position.set(120, groundY, 35);
+      this.playerRig.group.rotation.y = 0;
+      this.playerRotation = 0;
+      this.playerVelocity.set(0, 0, 0);
+      this.cameraController.targetPos.set(120, groundY + 1.2, 35);
+
+      this.activeMapId = 'kaifeng_battle_royale';
+      this.multiplayerManager.switchMap('kaifeng_battle_royale', this.playerRig.group.position);
+      this.callbacks.onNotification?.('কাইফেং রাজবংশে স্বাগতম! (MAP 01: Kaifeng The Grand Dynasty)', 'MAP 01');
+    } else {
+      // Hide Kaifeng World
+      if (this.kaifengWorld) {
+        this.kaifengWorld.group.visible = false;
+      }
+
+      // Restore Bangladesh World
+      this.terrain.group.visible = true;
+      this.riverEcosystem.group.visible = true;
+      this.npcManager.group.visible = true;
+      this.vehicleManager.group.visible = true;
+
+      // Teleport player to Bangladesh Bridgehead Gateway (X=115, Z=3)
+      const groundY = this.terrain.getTerrainHeight(115, 3) + 0.1;
+      this.playerRig.group.position.set(115, groundY, 3);
+      this.playerRig.group.rotation.y = -Math.PI / 2;
+      this.playerRotation = -Math.PI / 2;
+      this.playerVelocity.set(0, 0, 0);
+      this.cameraController.targetPos.set(115, groundY + 1.2, 3);
+
+      this.activeMapId = 'bangladesh_open_world';
+      this.multiplayerManager.switchMap('bangladesh_open_world', this.playerRig.group.position);
+      this.callbacks.onNotification?.('বাংলাদেশ ওপেন ওয়ার্ল্ডে স্বাগতম! (MAP 02: Bangladesh World)', 'MAP 02');
+    }
+  }
+
   public teleport(x: number, z: number) {
-    const y = this.terrain.getTerrainHeight(x, z);
+    const y = this.getTerrainHeight(x, z);
     this.playerRig.group.position.set(x, y, z);
     this.playerVelocity.set(0, 0, 0);
     this.callbacks.onNotification?.(`Fast travelled to [${Math.round(x)}, ${Math.round(z)}]`, 'TELEPORT');
@@ -1037,6 +1088,198 @@ export class GameEngine {
     }
     localStorage.setItem('dream_active_pet_companion', type);
     localStorage.setItem('dream_active_teddy', type);
+  }
+
+  // --- 5-SLOT TACTICAL CAROUSEL WEAPON & ACTION SYSTEM ---
+  public activeWeaponSlot = 0;
+  public weaponSlots = [
+    { id: 'primary', name: 'AKM-47 Pulse', category: 'Assault', ammo: 30, maxAmmo: 30, reserveAmmo: 120, icon: 'rifle' },
+    { id: 'secondary', name: 'Desert Eagle SMG', category: 'Pistol', ammo: 15, maxAmmo: 15, reserveAmmo: 60, icon: 'pistol' },
+    { id: 'melee', name: 'Padma Machete', category: 'Melee', ammo: 1, maxAmmo: 1, reserveAmmo: 0, icon: 'knife' },
+    { id: 'medical', name: 'First Aid Medkit', category: 'Heal', count: 3, maxCount: 5, icon: 'medkit' },
+    { id: 'utility', name: 'Tactical Smoke Grenade', category: 'Tactical', count: 2, maxCount: 4, icon: 'grenade' },
+  ];
+  private heldWeaponMesh: THREE.Group | null = null;
+
+  public equipSlot(slotIndex: number) {
+    if (slotIndex < 0 || slotIndex >= this.weaponSlots.length) return;
+    this.activeWeaponSlot = slotIndex;
+    soundManager.playCollectItem();
+    this.updateHeldWeaponMesh();
+  }
+
+  private updateHeldWeaponMesh() {
+    if (this.heldWeaponMesh) {
+      this.playerRig.rightHand.remove(this.heldWeaponMesh);
+      this.heldWeaponMesh = null;
+    }
+
+    const slot = this.weaponSlots[this.activeWeaponSlot];
+    const group = new THREE.Group();
+
+    if (slot.category === 'Assault') {
+      // Sleek tactical rifle
+      const bodyGeo = new THREE.BoxGeometry(0.06, 0.1, 0.42);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3, metalness: 0.8 });
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.position.set(0, -0.05, 0.15);
+      group.add(body);
+
+      const barrelGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.22, 8);
+      const barrelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.2, metalness: 0.9 });
+      const barrel = new THREE.Mesh(barrelGeo, barrelMat);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, -0.03, 0.4);
+      group.add(barrel);
+
+      const magGeo = new THREE.BoxGeometry(0.04, 0.12, 0.08);
+      const magMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.4, metalness: 0.6 });
+      const mag = new THREE.Mesh(magGeo, magMat);
+      mag.position.set(0, -0.12, 0.12);
+      mag.rotation.x = 0.2;
+      group.add(mag);
+    } else if (slot.category === 'Pistol') {
+      const pGeo = new THREE.BoxGeometry(0.05, 0.09, 0.2);
+      const pMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.3, metalness: 0.8 });
+      const p = new THREE.Mesh(pGeo, pMat);
+      p.position.set(0, -0.04, 0.08);
+      group.add(p);
+    } else if (slot.category === 'Melee') {
+      const handleGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.14, 8);
+      const handleMat = new THREE.MeshStandardMaterial({ color: 0x78350f });
+      const handle = new THREE.Mesh(handleGeo, handleMat);
+      handle.position.set(0, -0.04, 0);
+      group.add(handle);
+
+      const bladeGeo = new THREE.BoxGeometry(0.02, 0.05, 0.35);
+      const bladeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.15, metalness: 0.95 });
+      const blade = new THREE.Mesh(bladeGeo, bladeMat);
+      blade.position.set(0, -0.04, 0.22);
+      group.add(blade);
+    } else if (slot.category === 'Heal') {
+      const kitGeo = new THREE.BoxGeometry(0.12, 0.12, 0.08);
+      const kitMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.3 });
+      const kit = new THREE.Mesh(kitGeo, kitMat);
+      kit.position.set(0, -0.06, 0.06);
+      group.add(kit);
+    }
+
+    this.heldWeaponMesh = group;
+    this.playerRig.rightHand.add(group);
+  }
+
+  public fireWeapon() {
+    const slot = this.weaponSlots[this.activeWeaponSlot];
+    if (slot.category === 'Heal') {
+      this.quickHeal();
+      return;
+    }
+    if (slot.category === 'Tactical') {
+      if ('count' in slot && slot.count && slot.count > 0) {
+        slot.count--;
+        soundManager.playBlasterFire();
+        this.callbacks.onNotification?.('স্মোক গ্রেনেড নিক্ষেপ করা হয়েছে!', 'TACTICAL');
+      }
+      return;
+    }
+    if (slot.category === 'Melee') {
+      soundManager.playBlasterFire();
+      return;
+    }
+    if ('ammo' in slot && slot.ammo !== undefined) {
+      if (slot.ammo <= 0) {
+        soundManager.playBlasterReload();
+        this.callbacks.onNotification?.('রিলোড প্রয়োজন! (Reload Weapon)', 'AMMO EMPTY');
+        return;
+      }
+      slot.ammo--;
+      soundManager.playBlasterFire();
+
+      // Recoil kick on camera
+      this.cameraController.rotate(0, 0.015);
+
+      // Muzzle flash particle / light pulse
+      const flashLight = new THREE.PointLight(0xffaa44, 2.5, 9);
+      const playerPos = this.playerRig.group.position;
+      flashLight.position.set(playerPos.x, playerPos.y + 1.2, playerPos.z);
+      this.scene.add(flashLight);
+      setTimeout(() => this.scene.remove(flashLight), 60);
+
+      // Center crosshair raycast against remote players & NPCs
+      try {
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+        const candidateTargets: THREE.Object3D[] = [];
+        for (const [, actor] of this.multiplayerManager.remotePlayers) {
+          candidateTargets.push(actor.rig.group);
+        }
+        for (const npc of this.npcManager.npcs) {
+          candidateTargets.push(npc.rig.group);
+        }
+        const intersects = raycaster.intersectObjects(candidateTargets, true);
+        if (intersects.length > 0) {
+          const hit = intersects[0];
+          const isHeadshot = hit.point.y > 1.45;
+          const targetName = hit.object.name || 'Opponent';
+          soundManager.playHitMarkerSound(isHeadshot);
+          this.callbacks.onCombatHit?.({ isHeadshot, targetName });
+        }
+      } catch {}
+    }
+  }
+
+  public reloadWeapon() {
+    const slot = this.weaponSlots[this.activeWeaponSlot];
+    if (
+      'ammo' in slot &&
+      slot.ammo !== undefined &&
+      slot.maxAmmo !== undefined &&
+      slot.reserveAmmo !== undefined
+    ) {
+      if (slot.ammo >= slot.maxAmmo || slot.reserveAmmo <= 0) {
+        return;
+      }
+      const needed = slot.maxAmmo - slot.ammo;
+      const taken = Math.min(needed, slot.reserveAmmo);
+      slot.ammo += taken;
+      slot.reserveAmmo -= taken;
+      soundManager.playBlasterReload();
+      this.callbacks.onNotification?.(`${slot.name} রিলোড সম্পন্ন (${slot.ammo}/${slot.reserveAmmo})`, 'RELOAD');
+    }
+  }
+
+  public quickHeal() {
+    const medSlot = this.weaponSlots[3];
+    if ('count' in medSlot && medSlot.count && medSlot.count > 0) {
+      medSlot.count--;
+      const stats = this.questManager.playerStats;
+      stats.health = Math.min(stats.maxHealth, stats.health + 35);
+      stats.stamina = stats.maxStamina;
+      soundManager.playHealSound();
+      this.callbacks.onNotification?.('ফার্স্ট এইড ব্যবহার করা হয়েছে (+35 HP & Max Stamina)', 'HEAL');
+    } else {
+      const stats = this.questManager.playerStats;
+      if (stats.health < stats.maxHealth) {
+        stats.health = Math.min(stats.maxHealth, stats.health + 20);
+        soundManager.playHealSound();
+        this.callbacks.onNotification?.('ব্যান্ডেজ প্রয়োগ করা হয়েছে (+20 HP)', 'HEAL');
+      }
+    }
+  }
+
+  public setAim(aim: boolean) {
+    this.cameraController.setAim(aim);
+  }
+
+  public cycleCameraPerspective(): 'tp' | 'fp' | 'free' {
+    const next = this.cameraController.cyclePerspective();
+    soundManager.playUiClick();
+    this.callbacks.onNotification?.(
+      next === 'tp' ? 'Third Person View (টিপিপি)' :
+      next === 'fp' ? 'First Person View (এফপিপি)' : 'Free Orbit Look (ফ্রি লুক)',
+      'CAMERA'
+    );
+    return next;
   }
 
   public dispose() {

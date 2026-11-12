@@ -40,6 +40,7 @@ interface ConnectedClient {
   id: string;
   name: string;
   room: string;
+  mapId: string;
   isAlive: boolean;
   position: [number, number, number];
   rotationY: number;
@@ -330,6 +331,7 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
     id: reqId,
     name: reqName,
     room: targetRoom,
+    mapId: 'bangladesh_open_world',
     isAlive: true,
     position: [6, 0, 12],
     rotationY: 0,
@@ -356,6 +358,7 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
         existingRoomPlayers.push({
           id: other.id,
           name: other.name,
+          mapId: other.mapId || 'bangladesh_open_world',
           position: other.position,
           rotationY: other.rotationY,
           speed: other.speed,
@@ -382,6 +385,7 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
     senderId: reqId,
     name: reqName,
     room: targetRoom,
+    mapId: client.mapId,
     memberCount: rooms.get(targetRoom)!.size,
   }, reqId);
 
@@ -396,6 +400,36 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
         return;
       }
 
+      if (data.type === 'map_transition') {
+        const nextMap = String(data.mapId || 'bangladesh_open_world');
+        client.mapId = nextMap;
+        if (Array.isArray(data.position) && data.position.length === 3) {
+          client.position = [Number(data.position[0]), Number(data.position[1]), Number(data.position[2])];
+        }
+        if (typeof data.rotationY === 'number') {
+          client.rotationY = data.rotationY;
+        }
+
+        // Broadcast to peers that this player transitioned maps
+        broadcastToRoom(client.room, {
+          type: 'player_map_switched',
+          senderId: client.id,
+          name: client.name,
+          mapId: client.mapId,
+          position: client.position,
+          rotationY: client.rotationY,
+          appearance: client.appearance,
+        });
+
+        // Confirmation back to client
+        ws.send(JSON.stringify({
+          type: 'map_transition_confirmed',
+          mapId: client.mapId,
+          position: client.position,
+        }));
+        return;
+      }
+
       if (data.type === 'update') {
         client.position = data.position || client.position;
         client.rotationY = data.rotationY !== undefined ? data.rotationY : client.rotationY;
@@ -403,12 +437,16 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
         client.isAirborne = !!data.isAirborne;
         client.isDriving = !!data.isDriving;
         client.appearance = data.appearance || client.appearance;
+        if (data.mapId) {
+          client.mapId = String(data.mapId);
+        }
 
         // Relay to room peers
         broadcastToRoom(client.room, {
           type: 'update',
           senderId: client.id,
           name: client.name,
+          mapId: client.mapId,
           position: client.position,
           rotationY: client.rotationY,
           speed: client.speed,
